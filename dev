@@ -9,7 +9,7 @@ ARG1=$2
 ARG2=$3
 
 # --- Version & Update ---
-SCRIPT_VERSION="1.2.0"
+SCRIPT_VERSION="1.3.0"
 GITHUB_RAW_URL="https://raw.githubusercontent.com/m199671ms/dotfiles/main/dev"
 
 # --- Colors ---
@@ -1082,6 +1082,136 @@ function show_logs() {
 }
 
 # ──────────────────────────────────────
+# ALIASES
+# ──────────────────────────────────────
+
+ALIASES_FILE="$HOME_DIR/.devtoolkit_aliases"
+
+function load_aliases() {
+    [ -f "$ALIASES_FILE" ] || return
+    source "$ALIASES_FILE"
+}
+
+function alias_add() {
+    local NAME=$ARG1
+    local TARGET=$ARG2
+
+    [[ -z "$NAME" ]]   && read -p "Alias name   : " NAME
+    [[ -z "$TARGET" ]] && read -p "Command      : " TARGET
+    [[ -z "$NAME" || -z "$TARGET" ]] && log_error "Both name and command are required." && exit 1
+
+    # منع تعارض الأسماء مع الأوامر الأصلية
+    local BUILTIN_CMDS="create-repo push sync status log new-branch switch-branch merge-clean clean-branches undo save-project goto projects remove-project flutter-new flutter-run flutter-build flutter-test flutter-upgrade clean docker-build docker-run docker-list docker-stop docker-clean compose-up compose-down npm-install npm-run npm-build vue-new dotnet-new dotnet-run dotnet-build dotnet-test web-serve ssh-check config info logs update rollback alias-add alias-remove alias-list help"
+    if echo "$BUILTIN_CMDS" | grep -qw "$NAME"; then
+        log_error "'$NAME' is a built-in command. Choose a different alias name."
+        exit 1
+    fi
+
+    touch "$ALIASES_FILE"
+    # حذف القديم إن وجد
+    grep -v "^alias_map_${NAME}=" "$ALIASES_FILE" > "$TMP_DIR/_alias_tmp" \
+        && mv "$TMP_DIR/_alias_tmp" "$ALIASES_FILE"
+
+    echo "alias_map_${NAME}=\"${TARGET}\"" >> "$ALIASES_FILE"
+    log_success "Alias added: '${NAME}' → '${TARGET}'"
+    echo -e "${CYAN}Usage: dev ${NAME}${NC}"
+}
+
+function alias_remove() {
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Alias to remove: " NAME
+    [[ -z "$NAME" ]] && log_error "Alias name is required." && exit 1
+
+    if ! grep -q "^alias_map_${NAME}=" "$ALIASES_FILE" 2>/dev/null; then
+        log_error "Alias '$NAME' not found."
+        exit 1
+    fi
+
+    grep -v "^alias_map_${NAME}=" "$ALIASES_FILE" > "$TMP_DIR/_alias_tmp" \
+        && mv "$TMP_DIR/_alias_tmp" "$ALIASES_FILE"
+    log_success "Alias '$NAME' removed."
+}
+
+function alias_list() {
+    divider
+    echo -e "${BOLD}⚡ Custom Aliases${NC}"
+    divider
+    if [ ! -f "$ALIASES_FILE" ] || [ ! -s "$ALIASES_FILE" ]; then
+        log_warn "No aliases defined yet."
+        echo -e "  Add one with: ${CYAN}dev alias-add <name> <command>${NC}"
+        divider
+        return
+    fi
+
+    while IFS='=' read -r key value; do
+        local NAME=$(echo "$key" | sed 's/alias_map_//')
+        local TARGET=$(echo "$value" | tr -d '"')
+        echo -e "  ${GREEN}dev $NAME${NC} → ${CYAN}dev $TARGET${NC}"
+    done < "$ALIASES_FILE"
+    divider
+}
+
+function run_alias() {
+    local NAME=$1
+    load_aliases
+
+    local VAR_NAME="alias_map_${NAME}"
+    local TARGET="${!VAR_NAME}"
+
+    if [[ -z "$TARGET" ]]; then
+        log_error "Unknown command: '$NAME'"
+        echo -e "  Run ${CYAN}dev help${NC} to see available commands."
+        echo -e "  Run ${CYAN}dev alias-list${NC} to see your aliases."
+        exit 1
+    fi
+
+    log_info "Running alias: dev $NAME → dev $TARGET"
+
+    # تنفيذ الأمر المرتبط مع تمرير الـ args
+    COMMAND="$TARGET"
+    case "$TARGET" in
+        create-repo)     create_repo ;;
+        push)            quick_push ;;
+        sync)            sync_repo ;;
+        status)          git_status ;;
+        log)             git_log ;;
+        new-branch)      new_branch ;;
+        switch-branch)   switch_branch ;;
+        merge-clean)     merge_and_clean ;;
+        clean-branches)  clean_branches ;;
+        undo)            undo_commit ;;
+        save-project)    save_project ;;
+        goto)            goto_project ;;
+        projects)        list_projects ;;
+        remove-project)  remove_project ;;
+        flutter-new)     flutter_new ;;
+        flutter-run)     flutter_run_device ;;
+        flutter-build)   flutter_build ;;
+        flutter-test)    flutter_test ;;
+        flutter-upgrade) flutter_upgrade ;;
+        clean)           flutter clean && log_success "Cleaned!" ;;
+        docker-build)    docker_build ;;
+        docker-run)      docker_run ;;
+        docker-list)     docker_list ;;
+        docker-stop)     docker_stop_all ;;
+        docker-clean)    docker_clean ;;
+        compose-up)      docker_compose_up ;;
+        compose-down)    docker_compose_down ;;
+        npm-install)     node_install ;;
+        npm-run)         node_run ;;
+        npm-build)       node_build ;;
+        dotnet-build)    dotnet_build ;;
+        dotnet-run)      dotnet_run ;;
+        dotnet-test)     dotnet_test ;;
+        web-serve)       web_serve ;;
+        info)            show_info ;;
+        logs)            show_logs ;;
+        update)          self_update ;;
+        *)               log_error "Cannot alias to unknown command: '$TARGET'" ;;
+    esac
+}
+
+# ──────────────────────────────────────
 # INFO & HELP
 # ──────────────────────────────────────
 
@@ -1181,6 +1311,12 @@ function show_help() {
     echo -e "  ${GREEN}rollback${NC}                 الرجوع لإصدار سابق"
     echo -e "  ${GREEN}help${NC}                     هذه القائمة"
     divider
+    echo -e "${BOLD}${MAGENTA}⚡ Aliases${NC}"
+    echo -e "  ${GREEN}alias-add${NC} <n> <cmd>   إضافة اختصار جديد"
+    echo -e "  ${GREEN}alias-remove${NC} <n>      حذف اختصار"
+    echo -e "  ${GREEN}alias-list${NC}            عرض كل الاختصارات"
+    echo ""
+    divider
     echo -e "${BOLD}Usage:${NC} dev <command> [args]"
     echo -e "Example: ${CYAN}dev push \"fix login bug\"${NC}"
     echo -e "Example: ${CYAN}dev flutter-run myapp${NC}"
@@ -1234,6 +1370,17 @@ case "$COMMAND" in
     logs)            show_logs ;;
     update)          self_update ;;
     rollback)        self_rollback ;;
+    alias-add)    alias_add ;;
+    alias-remove) alias_remove ;;
+    alias-list)   alias_list ;;
     help|--help|-h)  show_help ;;
-    *)               show_help ;;
+    *)
+    load_aliases
+    VAR_NAME="alias_map_${COMMAND}"
+    if [[ -n "${!VAR_NAME}" ]]; then
+        run_alias "$COMMAND"
+    else
+        show_help
+    fi
+    ;;
 esac
