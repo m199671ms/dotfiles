@@ -199,6 +199,39 @@ function self_update() {
     echo -e "${BOLD}🔄 Checking for updates...${NC}"
     divider
 
+    # ────────────────────────────────
+    # 1. رفع التعديلات المحلية أولاً
+    # ────────────────────────────────
+    local SCRIPT_DIR
+    SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+    if [ -d "$SCRIPT_DIR/.git" ]; then
+        cd "$SCRIPT_DIR" || exit 1
+
+        # هل هناك تعديلات غير مرفوعة؟
+        if ! git diff --quiet dev 2>/dev/null || \
+           git status --short dev 2>/dev/null | grep -q "^[AM]"; then
+
+            log_step "Local changes detected. Pushing to GitHub..."
+
+            # طلب رسالة commit
+            read -p "Commit message (default: 'update script'): " PUSH_MSG
+            PUSH_MSG="${PUSH_MSG:-update script}"
+
+            git add dev
+            git commit -m "$PUSH_MSG" && git push \
+                && log_success "Local changes pushed!" \
+                || { log_error "Push failed. Check your remote/permissions."; exit 1; }
+        else
+            log_info "No local changes to push."
+        fi
+
+        cd - > /dev/null
+    fi
+
+    # ────────────────────────────────
+    # 2. التحقق من تحديثات GitHub
+    # ────────────────────────────────
     local TMP_FILE="$TMP_DIR/_dev_update_tmp"
 
     if ! gh api repos/m199671ms/dotfiles/contents/dev \
@@ -234,6 +267,9 @@ function self_update() {
         return 0
     fi
 
+    # ────────────────────────────────
+    # 3. تطبيق التحديث من GitHub
+    # ────────────────────────────────
     read -p "Update to v$REMOTE_VERSION? (y/n): " CONFIRM
     if [[ "$CONFIRM" != "y" ]]; then
         log_warn "Update cancelled."
