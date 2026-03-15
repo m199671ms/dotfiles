@@ -9,7 +9,7 @@ ARG1=$2
 ARG2=$3
 
 # --- Version & Update ---
-SCRIPT_VERSION="1.4.0"
+SCRIPT_VERSION="1.5.0"
 GITHUB_RAW_URL="https://raw.githubusercontent.com/m199671ms/dotfiles/main/dev"
 
 # --- Colors ---
@@ -1103,6 +1103,201 @@ function create_repo() {
 }
 
 # ──────────────────────────────────────
+# DOCTOR
+# ──────────────────────────────────────
+
+function run_doctor() {
+    local FIX_MODE=false
+    [[ "$ARG1" == "--fix" ]] && FIX_MODE=true
+
+    local WARNINGS=0
+    local ERRORS=0
+
+    divider
+    echo -e "${BOLD}🏥 Dev Doctor — $OS_TYPE${NC}"
+    divider
+
+    # دالة مساعدة لعرض النتيجة
+    function _check() {
+        local STATUS=$1  # ok / warn / error
+        local LABEL=$2
+        local VALUE=$3
+        case $STATUS in
+            ok)    echo -e "  ${GREEN}✅ $LABEL${NC} — $VALUE" ;;
+            warn)  echo -e "  ${YELLOW}⚠️  $LABEL${NC} — $VALUE"; WARNINGS=$((WARNINGS+1)) ;;
+            error) echo -e "  ${RED}❌ $LABEL${NC} — $VALUE"; ERRORS=$((ERRORS+1)) ;;
+        esac
+    }
+
+    # 1. Git
+    if command -v git &>/dev/null; then
+        _check ok "Git installed" "$(git --version | head -1)"
+    else
+        _check error "Git" "not installed"
+    fi
+
+    # 2. Git config
+    GIT_NAME_VAL=$(git config --global user.name 2>/dev/null)
+    GIT_EMAIL_VAL=$(git config --global user.email 2>/dev/null)
+
+    if [[ -n "$GIT_NAME_VAL" ]]; then
+        _check ok "Git name" "$GIT_NAME_VAL"
+    else
+        _check warn "Git name" "not set"
+        if $FIX_MODE; then
+            load_config
+            git config --global user.name "$GIT_NAME"
+            _check ok "Git name" "fixed → $GIT_NAME"
+        fi
+    fi
+
+    if [[ -n "$GIT_EMAIL_VAL" ]]; then
+        _check ok "Git email" "$GIT_EMAIL_VAL"
+    else
+        _check warn "Git email" "not set"
+        if $FIX_MODE; then
+            load_config
+            git config --global user.email "$PERSONAL_EMAIL"
+            _check ok "Git email" "fixed → $PERSONAL_EMAIL"
+        fi
+    fi
+
+    # 3. GitHub CLI
+    if command -v gh &>/dev/null; then
+        local GH_USER
+        GH_USER=$(gh api user -q .login 2>/dev/null)
+        if [[ -n "$GH_USER" ]]; then
+            _check ok "GitHub CLI" "logged in as $GH_USER"
+        else
+            _check warn "GitHub CLI" "not authenticated — run: gh auth login"
+        fi
+    else
+        _check error "GitHub CLI" "not installed — https://cli.github.com"
+    fi
+
+    # 4. SSH Keys
+    for KEY in github_personal github_company; do
+        if [ -f "$HOME_DIR/.ssh/$KEY" ]; then
+            _check ok "SSH key ($KEY)" "found"
+        else
+            _check warn "SSH key ($KEY)" "not found — run: dev ssh-check"
+        fi
+    done
+
+    # 5. Flutter
+    if command -v flutter &>/dev/null; then
+        local FL_VER
+        FL_VER=$(flutter --version 2>/dev/null | head -1 | awk '{print $2}')
+        _check ok "Flutter" "v$FL_VER"
+
+        # Flutter doctor summary
+        log_step "Running flutter doctor..."
+        local FL_ISSUES
+        FL_ISSUES=$(flutter doctor 2>/dev/null | grep -E "^\[!?\]|\[✗\]" | wc -l | tr -d ' ')
+        if [[ "$FL_ISSUES" == "0" ]]; then
+            _check ok "Flutter doctor" "no issues"
+        else
+            _check warn "Flutter doctor" "$FL_ISSUES issue(s) found — run: flutter doctor"
+        fi
+
+        # CocoaPods على macOS فقط
+        if [[ "$OS_TYPE" == "macos" ]]; then
+            if command -v pod &>/dev/null; then
+                local POD_VER
+                POD_VER=$(pod --version 2>/dev/null)
+                _check ok "CocoaPods" "v$POD_VER"
+                if $FIX_MODE; then
+                    log_step "Updating CocoaPods repos..."
+                    pod repo update > /dev/null 2>&1 \
+                        && _check ok "CocoaPods repos" "updated" \
+                        || _check warn "CocoaPods repos" "update failed"
+                fi
+            else
+                _check warn "CocoaPods" "not installed — run: sudo gem install cocoapods"
+                $FIX_MODE && sudo gem install cocoapods > /dev/null 2>&1 \
+                    && _check ok "CocoaPods" "installed!"
+            fi
+        fi
+
+        # Android SDK
+        if [[ -n "$ANDROID_HOME" && -d "$ANDROID_HOME" ]]; then
+            _check ok "Android SDK" "$ANDROID_HOME"
+        else
+            _check error "Android SDK" "ANDROID_HOME not set"
+        fi
+    else
+        _check warn "Flutter" "not installed — https://flutter.dev"
+    fi
+
+    # 6. Docker
+    if command -v docker &>/dev/null; then
+        if docker info > /dev/null 2>&1; then
+            _check ok "Docker" "running"
+        else
+            _check warn "Docker" "not running — start Docker Desktop"
+            if $FIX_MODE; then
+                case "$OS_TYPE" in
+                    macos)   open -a Docker 2>/dev/null ;;
+                    linux)   sudo systemctl start docker 2>/dev/null ;;
+                    windows) start "" "Docker Desktop" 2>/dev/null ;;
+                esac
+                sleep 3
+                docker info > /dev/null 2>&1 \
+                    && _check ok "Docker" "started!" \
+                    || _check warn "Docker" "could not start automatically"
+            fi
+        fi
+    else
+        _check warn "Docker" "not installed — https://docker.com"
+    fi
+
+    # 7. Node.js
+    if command -v node &>/dev/null; then
+        _check ok "Node.js" "$(node --version)"
+    else
+        _check warn "Node.js" "not installed — https://nodejs.org"
+    fi
+
+    # 8. .NET
+    if command -v dotnet &>/dev/null; then
+        _check ok ".NET" "$(dotnet --version)"
+    else
+        _check warn ".NET" "not installed (optional)"
+    fi
+
+    # 9. Disk space
+    local FREE_GB
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        FREE_GB=$(df -BG "$HOME_DIR" 2>/dev/null | tail -1 | awk '{print $4}' | tr -d 'G')
+    else
+        FREE_GB=$(df -BG "$HOME_DIR" 2>/dev/null | tail -1 | awk '{print $4}' | tr -d 'G')
+    fi
+
+    if [[ -n "$FREE_GB" ]]; then
+        if (( FREE_GB > 5 )); then
+            _check ok "Disk space" "${FREE_GB} GB free"
+        else
+            _check warn "Disk space" "${FREE_GB} GB free — running low!"
+        fi
+    fi
+
+    # الملخص
+    divider
+    if [[ $ERRORS -eq 0 && $WARNINGS -eq 0 ]]; then
+        log_success "Everything looks good! No issues found."
+    else
+        [[ $WARNINGS -gt 0 ]] && echo -e "  ${YELLOW}⚠️  $WARNINGS warning(s)${NC}"
+        [[ $ERRORS -gt 0 ]]   && echo -e "  ${RED}❌ $ERRORS error(s)${NC}"
+        if ! $FIX_MODE; then
+            echo ""
+            echo -e "  Run ${CYAN}dev doctor --fix${NC} to auto-fix issues"
+        fi
+    fi
+    divider
+    log_to_file "Doctor: $WARNINGS warnings, $ERRORS errors"
+}
+
+# ──────────────────────────────────────
 # LOGS
 # ──────────────────────────────────────
 
@@ -1338,6 +1533,10 @@ function show_help() {
     echo -e "${BOLD}${MAGENTA}🌐 Web${NC}"
     echo -e "  ${GREEN}web-serve${NC} [port]         تشغيل local server"
     echo ""
+        echo -e "${BOLD}${MAGENTA}🏥 Doctor${NC}"
+    echo -e "  ${GREEN}doctor${NC}                   فحص بيئة التطوير"
+    echo -e "  ${GREEN}doctor --fix${NC}             فحص وإصلاح تلقائي"
+    echo ""
     echo -e "${BOLD}${MAGENTA}🔧 Other${NC}"
     echo -e "  ${GREEN}ssh-check${NC}                إعداد SSH keys"
     echo -e "  ${GREEN}config${NC}                   تعديل الإعدادات"
@@ -1401,6 +1600,7 @@ case "$COMMAND" in
     dotnet-test)     dotnet_test ;;
     web-serve)       web_serve ;;
     ssh-check)       check_ssh ;;
+    doctor)   run_doctor ;;
     config)          edit_config ;;
     info)            show_info ;;
     logs)            show_logs ;;
