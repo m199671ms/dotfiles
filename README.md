@@ -2,7 +2,7 @@
 
 > أداة سطر أوامر شاملة تسرّع عملك اليومي في التطوير — تدعم **macOS** و**Windows** و**Linux**
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
+![Version](https://img.shields.io/badge/version-1.4.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![Shell](https://img.shields.io/badge/shell-bash-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
