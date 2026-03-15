@@ -1,0 +1,929 @@
+#!/bin/bash
+
+# =====================================
+# 🚀 Developer CLI Toolkit v4
+# =====================================
+
+COMMAND=$1
+ARG1=$2
+ARG2=$3
+
+# --- Colors ---
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+CYAN="\033[0;36m"
+BLUE="\033[0;34m"
+MAGENTA="\033[0;35m"
+BOLD="\033[1m"
+NC="\033[0m"
+
+CONFIG_FILE="$HOME/.devtoolkit_config"
+PROJECTS_FILE="$HOME/.devtoolkit_projects"
+LOG_FILE="$HOME/.devtoolkit.log"
+
+# ──────────────────────────────────────
+# UTILS
+# ──────────────────────────────────────
+
+function log_info()    { echo -e "${CYAN}ℹ️  $1${NC}"; }
+function log_success() { echo -e "${GREEN}✅ $1${NC}"; }
+function log_warn()    { echo -e "${YELLOW}⚠️  $1${NC}"; }
+function log_error()   { echo -e "${RED}❌ $1${NC}"; }
+function log_step()    { echo -e "${BLUE}▶  $1${NC}"; }
+function divider()     { echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
+
+function log_to_file() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+function require_command() {
+    command -v "$1" &>/dev/null || {
+        log_error "'$1' is not installed. Please install it first."
+        exit 1
+    }
+}
+
+function require_git_repo() {
+    [ -d ".git" ] || {
+        log_error "Not a git repository. Run 'dev create-repo' or 'git init' first."
+        exit 1
+    }
+}
+
+function confirm() {
+    read -p "$1 (y/n): " _CONFIRM
+    [[ "$_CONFIRM" == "y" ]]
+}
+
+# ──────────────────────────────────────
+# CONFIG
+# ──────────────────────────────────────
+
+function load_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        divider
+        echo -e "${BOLD}⚙️  First time setup${NC}"
+        divider
+        read -p "Personal GitHub email : " PERSONAL_EMAIL
+        read -p "Company GitHub email  : " COMPANY_EMAIL
+        read -p "Your full name        : " GIT_NAME
+        read -p "Default editor (code/vim/nano): " EDITOR_PREF
+        EDITOR_PREF="${EDITOR_PREF:-code}"
+        {
+            echo "PERSONAL_EMAIL=$PERSONAL_EMAIL"
+            echo "COMPANY_EMAIL=$COMPANY_EMAIL"
+            echo "GIT_NAME=$GIT_NAME"
+            echo "EDITOR_PREF=$EDITOR_PREF"
+        } > "$CONFIG_FILE"
+        git config --global user.name "$GIT_NAME"
+        log_success "Config saved at $CONFIG_FILE"
+    fi
+    source "$CONFIG_FILE"
+}
+
+function edit_config() {
+    load_config
+    echo -e "${BOLD}Current config:${NC}"
+    cat "$CONFIG_FILE"
+    echo ""
+    if confirm "Edit config?"; then
+        read -p "Personal email [$PERSONAL_EMAIL]: " _PE
+        read -p "Company email  [$COMPANY_EMAIL]: " _CE
+        read -p "Full name      [$GIT_NAME]: " _GN
+        read -p "Editor         [$EDITOR_PREF]: " _ED
+        {
+            echo "PERSONAL_EMAIL=${_PE:-$PERSONAL_EMAIL}"
+            echo "COMPANY_EMAIL=${_CE:-$COMPANY_EMAIL}"
+            echo "GIT_NAME=${_GN:-$GIT_NAME}"
+            echo "EDITOR_PREF=${_ED:-$EDITOR_PREF}"
+        } > "$CONFIG_FILE"
+        log_success "Config updated."
+    fi
+}
+
+# ──────────────────────────────────────
+# SSH
+# ──────────────────────────────────────
+
+function check_ssh() {
+    load_config
+    log_info "Checking SSH keys..."
+    SSH_PATH="$HOME/.ssh"
+    mkdir -p "$SSH_PATH"
+
+    read -p "Account type (personal/company): " ACCOUNT
+    case "$ACCOUNT" in
+        personal) KEY_NAME="github_personal"; EMAIL_VAR="$PERSONAL_EMAIL" ;;
+        company)  KEY_NAME="github_company";  EMAIL_VAR="$COMPANY_EMAIL"  ;;
+        *) log_error "Invalid account. Use: personal or company"; exit 1 ;;
+    esac
+
+    if [ ! -f "$SSH_PATH/$KEY_NAME" ]; then
+        log_step "Generating SSH key for '$ACCOUNT'..."
+        ssh-keygen -t ed25519 -C "$EMAIL_VAR" -f "$SSH_PATH/$KEY_NAME" -N ""
+        echo -e "${GREEN}📋 Add this key to GitHub → Settings → SSH Keys:${NC}"
+        echo -e "${CYAN}$(cat "$SSH_PATH/$KEY_NAME.pub")${NC}"
+        read -p "Press Enter after adding to GitHub..."
+    fi
+
+    eval "$(ssh-agent -s)" > /dev/null
+    ssh-add "$SSH_PATH/$KEY_NAME" > /dev/null
+    log_success "SSH key loaded: $KEY_NAME"
+    log_to_file "SSH loaded: $KEY_NAME"
+}
+
+# ──────────────────────────────────────
+# GIT HELPERS
+# ──────────────────────────────────────
+
+# add + commit + push بأمر واحد
+function quick_push() {
+    require_git_repo
+    local MSG=$ARG1
+    [[ -z "$MSG" ]] && read -p "Commit message: " MSG
+    [[ -z "$MSG" ]] && log_error "Commit message is required." && exit 1
+
+    log_step "Staging all changes..."
+    git add .
+    git commit -m "$MSG" || { log_warn "Nothing to commit."; exit 0; }
+    if git push; then
+        log_success "Pushed: \"$MSG\""
+        log_to_file "Pushed: $MSG"
+    else
+        log_error "Push failed. Check your remote/permissions."
+        exit 1
+    fi
+}
+
+# عرض حالة المشروع
+function git_status() {
+    require_git_repo
+    divider
+    echo -e "${BOLD}📋 Git Status${NC}"
+    divider
+    BRANCH=$(git branch --show-current)
+    REMOTE=$(git remote get-url origin 2>/dev/null || echo "No remote")
+    AHEAD=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo "?")
+    echo -e "  Branch : ${GREEN}$BRANCH${NC}"
+    echo -e "  Remote : ${CYAN}$REMOTE${NC}"
+    echo -e "  Ahead  : ${YELLOW}$AHEAD commits${NC}"
+    echo ""
+    git status -s
+    echo ""
+    echo -e "${BOLD}Last 7 commits:${NC}"
+    git log --oneline -7 --decorate --color
+    divider
+}
+
+# إنشاء branch جديد
+function new_branch() {
+    require_git_repo
+    local BRANCH=$ARG1
+    [[ -z "$BRANCH" ]] && read -p "Branch name: " BRANCH
+    [[ -z "$BRANCH" ]] && log_error "Branch name is required." && exit 1
+
+    git checkout -b "$BRANCH" \
+        && log_success "Created and switched to: $BRANCH" \
+        || log_error "Failed to create branch."
+}
+
+# التبديل بين الفروع
+function switch_branch() {
+    require_git_repo
+    echo -e "${BOLD}Available branches:${NC}"
+    git branch -a --color
+    echo ""
+    read -p "Branch to switch to: " BRANCH
+    git checkout "$BRANCH" \
+        && log_success "Switched to: $BRANCH" \
+        || log_error "Failed to switch branch."
+}
+
+# دمج branch وحذفه
+function merge_and_clean() {
+    require_git_repo
+    CURRENT=$(git branch --show-current)
+    read -p "Merge '$CURRENT' into (default: main): " TARGET
+    TARGET="${TARGET:-main}"
+
+    git checkout "$TARGET" \
+        && git merge "$CURRENT" \
+        && git branch -d "$CURRENT" \
+        && log_success "Merged '$CURRENT' → '$TARGET' and deleted branch." \
+        || log_error "Merge failed."
+}
+
+# التراجع عن آخر commit
+function undo_commit() {
+    require_git_repo
+    git reset --soft HEAD~1 \
+        && log_success "Last commit undone. Changes kept in staging." \
+        || log_error "Failed to undo commit."
+}
+
+# سحب آخر التغييرات مع rebase
+function sync_repo() {
+    require_git_repo
+    BRANCH=$(git branch --show-current)
+    log_step "Syncing '$BRANCH' with remote..."
+    git pull --rebase origin "$BRANCH" \
+        && log_success "Synced successfully!" \
+        || log_error "Sync failed. Resolve conflicts then run 'git rebase --continue'."
+}
+
+# حذف الـ branches المدمجة
+function clean_branches() {
+    require_git_repo
+    log_step "Deleting merged branches..."
+    git branch --merged main | grep -v "^\*\|main\|master" | xargs git branch -d 2>/dev/null \
+        && log_success "Merged branches cleaned." \
+        || log_warn "No merged branches to clean."
+}
+
+# عرض git log بشكل جميل
+function git_log() {
+    require_git_repo
+    git log --graph --oneline --decorate --all --color | head -30
+}
+
+# ──────────────────────────────────────
+# PROJECT MANAGER
+# ──────────────────────────────────────
+
+function save_project() {
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project alias: " NAME
+    [[ -z "$NAME" ]] && log_error "Alias is required." && exit 1
+
+    touch "$PROJECTS_FILE"
+    # حذف القديم إن وجد
+    grep -v "^$NAME=" "$PROJECTS_FILE" > /tmp/_proj_tmp && mv /tmp/_proj_tmp "$PROJECTS_FILE"
+    echo "$NAME=$(pwd)" >> "$PROJECTS_FILE"
+    log_success "Project '$NAME' saved → $(pwd)"
+}
+
+function goto_project() {
+    local NAME=$ARG1
+    if [[ -z "$NAME" ]]; then
+        list_projects
+        read -p "Project name: " NAME
+    fi
+    local PROJ_PATH
+    PROJ_PATH=$(grep "^$NAME=" "$PROJECTS_FILE" 2>/dev/null | cut -d= -f2)
+    if [[ -n "$PROJ_PATH" && -d "$PROJ_PATH" ]]; then
+        cd "$PROJ_PATH" || exit 1
+        log_success "Switched to: $PROJ_PATH"
+        load_config
+        command -v "$EDITOR_PREF" &>/dev/null && "$EDITOR_PREF" . &
+    else
+        log_error "Project '$NAME' not found or path missing."
+    fi
+}
+
+function list_projects() {
+    divider
+    echo -e "${BOLD}📁 Saved Projects${NC}"
+    divider
+    if [ -f "$PROJECTS_FILE" ] && [ -s "$PROJECTS_FILE" ]; then
+        while IFS='=' read -r name path; do
+            if [ -d "$path" ]; then
+                echo -e "  ${GREEN}● $name${NC} → $path"
+            else
+                echo -e "  ${RED}✗ $name${NC} → $path ${YELLOW}(missing)${NC}"
+            fi
+        done < "$PROJECTS_FILE"
+    else
+        log_warn "No projects saved. Use: dev save-project <name>"
+    fi
+    divider
+}
+
+function remove_project() {
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project alias to remove: " NAME
+    grep -v "^$NAME=" "$PROJECTS_FILE" > /tmp/_proj_tmp && mv /tmp/_proj_tmp "$PROJECTS_FILE"
+    log_success "Project '$NAME' removed."
+}
+
+# ──────────────────────────────────────
+# FLUTTER
+# ──────────────────────────────────────
+
+function flutter_new() {
+    require_command flutter
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project name: " NAME
+    [[ -z "$NAME" ]] && log_error "Project name is required." && exit 1
+
+    read -p "Organization (e.g. com.company): " ORG
+    ORG="${ORG:-com.example}"
+
+    log_step "Creating Flutter project: $NAME"
+    flutter create --org "$ORG" "$NAME" \
+        && log_success "Flutter project '$NAME' created!" \
+        || { log_error "flutter create failed."; exit 1; }
+}
+
+function flutter_run_device() {
+    require_command flutter
+
+    divider
+    echo -e "${BOLD}⚡ Flutter Run${NC}"
+    divider
+    echo "  1) Android"
+    echo "  2) iOS"
+    echo "  3) Desktop"
+    echo "  4) Web"
+    echo "  5) اختيار جهاز محدد"
+    divider
+    read -p "Choice [1-5]: " CHOICE
+
+    # دالة داخلية لإصلاح CocoaPods تلقائياً
+    function _fix_cocoapods() {
+        log_warn "CocoaPods dependency issue detected. Fixing automatically..."
+        
+        if [ ! -d "ios" ]; then
+            log_error "No ios folder found."
+            return 1
+        fi
+
+        cd ios
+
+        # المحاولة الأولى: تحديث الـ pod المشكلة فقط
+        log_step "Attempt 1: Updating conflicting pods..."
+        if pod update sqlite3 > /dev/null 2>&1; then
+            log_success "Pods updated successfully."
+            cd ..
+            return 0
+        fi
+
+        # المحاولة الثانية: تحديث كل الـ repos
+        log_step "Attempt 2: Updating CocoaPods repos..."
+        if pod repo update > /dev/null 2>&1 && pod install > /dev/null 2>&1; then
+            log_success "CocoaPods repos updated."
+            cd ..
+            return 0
+        fi
+
+        # المحاولة الثالثة: deintegrate كامل
+        log_step "Attempt 3: Full CocoaPods reinstall..."
+        pod deintegrate > /dev/null 2>&1
+        if pod install --repo-update > /dev/null 2>&1; then
+            log_success "CocoaPods reinstalled successfully."
+            cd ..
+            return 0
+        fi
+
+        cd ..
+        log_error "Could not fix CocoaPods automatically. Try manually: cd ios && pod install --repo-update"
+        return 1
+    }
+
+    # دالة تشغيل مع كشف الأخطاء ومعالجتها
+    function _run_with_error_handling() {
+    local DEVICE_FLAG=$1
+    local MAX_RETRIES=2
+    local ATTEMPT=0
+
+    while [ $ATTEMPT -le $MAX_RETRIES ]; do
+        ATTEMPT=$((ATTEMPT + 1))
+        log_step "Launching Flutter app (attempt $ATTEMPT)..."
+
+        # ملف مؤقت لحفظ الـ output
+        local TMP_LOG=$(mktemp)
+
+        # تشغيل flutter وعرض الـ output مباشرة + حفظه
+        flutter run $DEVICE_FLAG 2>&1 | tee "$TMP_LOG"
+        EXIT_CODE=${PIPESTATUS[0]}
+
+        # قراءة الـ output للكشف عن الأخطاء
+        OUTPUT=$(cat "$TMP_LOG")
+        rm -f "$TMP_LOG"
+
+        # إذا خرج بنجاح أو المستخدم أغلق التطبيق بنفسه (q)
+        if [ $EXIT_CODE -eq 0 ]; then
+            log_success "Session ended."
+            return 0
+        fi
+
+        # كشف إذا التطبيق اشتغل فعلاً قبل ما يصير خطأ
+        if echo "$OUTPUT" | grep -q "Flutter run key commands\|Syncing files to device\|To hot reload\|Running with"; then
+            log_success "App was running successfully."
+            return 0
+        fi
+
+        # كشف مشكلة CocoaPods
+        if echo "$OUTPUT" | grep -q "CocoaPods.*out-of-date\|pod install\|CocoaPods could not find compatible"; then
+            log_warn "CocoaPods issue detected on attempt $ATTEMPT."
+            if [ $ATTEMPT -le $MAX_RETRIES ]; then
+                _fix_cocoapods && continue
+            fi
+        fi
+
+        # كشف مشكلة Gradle
+        if echo "$OUTPUT" | grep -q "Gradle\|gradle"; then
+            log_warn "Gradle issue detected. Cleaning and retrying..."
+            flutter clean > /dev/null 2>&1
+            flutter pub get > /dev/null 2>&1
+            continue
+        fi
+
+        # كشف مشكلة pub
+        if echo "$OUTPUT" | grep -q "pub get\|pubspec"; then
+            log_warn "Pub dependencies issue. Running flutter pub get..."
+            flutter pub get && continue
+        fi
+
+        log_error "Launch failed. Exit code: $EXIT_CODE"
+        return 1
+    done
+
+    log_error "Failed after $MAX_RETRIES attempts."
+    return 1
+}
+
+    # تنفيذ الاختيار
+    case $CHOICE in
+        1)
+            log_step "Fetching Android devices..."
+            DEVICES=$(flutter devices 2>/dev/null | grep -i "android")
+            if [[ -z "$DEVICES" ]]; then
+                log_error "No Android devices found."
+                exit 1
+            fi
+            echo "$DEVICES"
+            read -p "Device ID (empty = first available): " DEVICE
+            FLAG="-d ${DEVICE:-android}"
+            _run_with_error_handling "$FLAG"
+            ;;
+        2)
+            log_step "Fetching iOS devices..."
+            DEVICES=$(flutter devices 2>/dev/null | grep -i "ios\|iphone\|ipad")
+            if [[ -z "$DEVICES" ]]; then
+                log_error "No iOS devices found."
+                exit 1
+            fi
+            echo "$DEVICES"
+            read -p "Device ID (empty = first available): " DEVICE
+            FLAG="-d ${DEVICE:-ios}"
+            _run_with_error_handling "$FLAG"
+            ;;
+        3)
+            if [[ "$OSTYPE" == "linux-gnu"* ]];  then FLAG="-d linux"
+            elif [[ "$OSTYPE" == "darwin"* ]];   then FLAG="-d macos"
+            elif [[ "$OSTYPE" == "msys"* ]];     then FLAG="-d windows"
+            else log_error "Desktop platform not detected." && exit 1
+            fi
+            _run_with_error_handling "$FLAG"
+            ;;
+        4)
+            read -p "Browser (chrome/edge, default: chrome): " BROWSER
+            _run_with_error_handling "-d ${BROWSER:-chrome}"
+            ;;
+        5)
+            flutter devices
+            read -p "Device ID: " DEVICE
+            [[ -z "$DEVICE" ]] && log_error "Device ID required." && exit 1
+            _run_with_error_handling "-d $DEVICE"
+            ;;
+        *)
+            log_error "Invalid choice."
+            exit 1
+            ;;
+    esac
+}
+
+function flutter_build() {
+    require_command flutter
+    echo -e "${BOLD}Build target:${NC}"
+    echo "  1) APK (release)"
+    echo "  2) APK (debug)"
+    echo "  3) iOS"
+    echo "  4) Web"
+    echo "  5) Linux"
+    read -p "Choice [1-5]: " CHOICE
+    case $CHOICE in
+        1) flutter build apk --release  && log_success "APK (release) built!" ;;
+        2) flutter build apk --debug    && log_success "APK (debug) built!" ;;
+        3) flutter build ios            && log_success "iOS built!" ;;
+        4) flutter build web            && log_success "Web built!" ;;
+        5) flutter build linux          && log_success "Linux built!" ;;
+        *) log_error "Invalid choice." ;;
+    esac
+}
+
+function flutter_test() {
+    require_command flutter
+    log_step "Running Flutter tests..."
+    flutter test && log_success "All tests passed!" || log_error "Tests failed."
+}
+
+function flutter_upgrade() {
+    require_command flutter
+    log_step "Upgrading Flutter..."
+    flutter upgrade && flutter pub upgrade
+    log_success "Flutter upgraded!"
+}
+
+# ──────────────────────────────────────
+# DOCKER
+# ──────────────────────────────────────
+
+function docker_build() {
+    require_command docker
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Image name: " NAME
+    [[ -z "$NAME" ]] && log_error "Image name is required." && exit 1
+    [ ! -f Dockerfile ] && { log_error "No Dockerfile found in current directory."; exit 1; }
+
+    read -p "Tag (default: latest): " TAG
+    TAG="${TAG:-latest}"
+
+    log_step "Building image: $NAME:$TAG"
+    docker build -t "$NAME:$TAG" . \
+        && log_success "Image '$NAME:$TAG' built!" \
+        || { log_error "Docker build failed."; exit 1; }
+    log_to_file "Docker built: $NAME:$TAG"
+}
+
+function docker_run() {
+    require_command docker
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Image name: " NAME
+    [[ -z "$NAME" ]] && log_error "Image name is required." && exit 1
+
+    read -p "Port mapping (e.g. 8080:80, empty to skip): " PORT
+    read -p "Container name (empty to skip): " CNAME
+    PORT_FLAG=""; CNAME_FLAG=""
+    [[ -n "$PORT"  ]] && PORT_FLAG="-p $PORT"
+    [[ -n "$CNAME" ]] && CNAME_FLAG="--name $CNAME"
+
+    log_step "Running container: $NAME"
+    docker run -it --rm $PORT_FLAG $CNAME_FLAG "$NAME"
+}
+
+function docker_list() {
+    require_command docker
+    divider
+    echo -e "${BOLD}🐳 Images${NC}"
+    divider
+    docker images
+    echo ""
+    divider
+    echo -e "${BOLD}🐳 Running Containers${NC}"
+    divider
+    docker ps
+}
+
+function docker_stop_all() {
+    require_command docker
+    log_step "Stopping all running containers..."
+    docker stop $(docker ps -q) 2>/dev/null \
+        && log_success "All containers stopped." \
+        || log_warn "No running containers."
+}
+
+function docker_clean() {
+    require_command docker
+    log_warn "This will remove all stopped containers and unused images."
+    confirm "Continue?" || exit 0
+    docker system prune -f && log_success "Docker cleaned!"
+}
+
+function docker_compose_up() {
+    require_command docker
+    [ ! -f docker-compose.yml ] && { log_error "No docker-compose.yml found."; exit 1; }
+    log_step "Starting services..."
+    docker compose up -d && log_success "Services started!" || log_error "Failed."
+}
+
+function docker_compose_down() {
+    require_command docker
+    log_step "Stopping services..."
+    docker compose down && log_success "Services stopped." || log_error "Failed."
+}
+
+# ──────────────────────────────────────
+# NODE / VUE
+# ──────────────────────────────────────
+
+function node_install() {
+    require_command npm
+    log_step "Installing dependencies..."
+    npm install && log_success "Dependencies installed!" || log_error "npm install failed."
+}
+
+function node_run() {
+    require_command npm
+    local SCRIPT=$ARG1
+    [[ -z "$SCRIPT" ]] && SCRIPT="dev"
+    log_step "Running npm $SCRIPT..."
+    npm run "$SCRIPT"
+}
+
+function node_build() {
+    require_command npm
+    log_step "Building project..."
+    npm run build && log_success "Build complete!" || log_error "Build failed."
+}
+
+function vue_new() {
+    require_command npm
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project name: " NAME
+    [[ -z "$NAME" ]] && log_error "Project name is required." && exit 1
+    log_step "Creating Vue project: $NAME"
+    npm create vue@latest "$NAME" && log_success "Vue project '$NAME' created!"
+}
+
+# ──────────────────────────────────────
+# .NET
+# ──────────────────────────────────────
+
+function dotnet_new() {
+    require_command dotnet
+    echo -e "${BOLD}Project template:${NC}"
+    echo "  1) console"
+    echo "  2) webapi"
+    echo "  3) mvc"
+    echo "  4) blazorwasm"
+    echo "  5) classlib"
+    read -p "Choice [1-5]: " CHOICE
+    local TEMPLATE
+    case $CHOICE in
+        1) TEMPLATE="console" ;;
+        2) TEMPLATE="webapi"  ;;
+        3) TEMPLATE="mvc"     ;;
+        4) TEMPLATE="blazorwasm" ;;
+        5) TEMPLATE="classlib" ;;
+        *) log_error "Invalid choice." && exit 1 ;;
+    esac
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project name: " NAME
+    log_step "Creating .NET $TEMPLATE project: $NAME"
+    dotnet new "$TEMPLATE" -n "$NAME" && log_success ".NET project '$NAME' created!"
+}
+
+function dotnet_run() {
+    require_command dotnet
+    log_step "Running .NET project..."
+    dotnet run
+}
+
+function dotnet_build() {
+    require_command dotnet
+    log_step "Building .NET project..."
+    dotnet build && log_success "Build complete!" || log_error "Build failed."
+}
+
+function dotnet_test() {
+    require_command dotnet
+    log_step "Running .NET tests..."
+    dotnet test && log_success "Tests passed!" || log_error "Tests failed."
+}
+
+# ──────────────────────────────────────
+# WEB
+# ──────────────────────────────────────
+
+function web_serve() {
+    local PORT=$ARG1
+    PORT="${PORT:-3000}"
+    if command -v npx &>/dev/null; then
+        log_step "Starting local server on http://localhost:$PORT"
+        npx serve -l "$PORT" .
+    elif command -v python3 &>/dev/null; then
+        log_step "Starting Python server on http://localhost:$PORT"
+        python3 -m http.server "$PORT"
+    else
+        log_error "No server available. Install Node.js or Python3."
+    fi
+}
+
+# ──────────────────────────────────────
+# CREATE REPO
+# ──────────────────────────────────────
+
+function write_gitignore() {
+    case $1 in
+        1) printf "build/\n.dart_tool/\n.packages\n.pub-cache/\n*.g.dart\n.flutter-plugins\n.flutter-plugins-dependencies\n" > .gitignore ;;
+        2) printf "node_modules/\ndist/\n.env\n.env.local\n.env.production\nnpm-debug.log*\n" > .gitignore ;;
+        3) printf "node_modules/\ndist/\n.env\n.env.local\n.nuxt/\n.output/\n*.log\n" > .gitignore ;;
+        4) printf "bin/\nobj/\n.vs/\n*.user\n*.suo\n[Pp]ublish/\n*.nupkg\n.env\n" > .gitignore ;;
+        5) printf "node_modules/\ndist/\n.env\n.DS_Store\nThumbs.db\n*.log\n" > .gitignore ;;
+    esac
+    log_success ".gitignore created"
+}
+
+function create_repo() {
+    require_command gh
+    check_ssh
+    [ ! -d ".git" ] && git init && log_success "Git initialized"
+
+    read -p "Repository name : " REPO_NAME
+    [[ -z "$REPO_NAME" ]] && log_error "Name is required." && exit 1
+    read -p "Private? (y/n)  : " PRIVATE
+    VISIBILITY="--public"; [[ "$PRIVATE" == "y" ]] && VISIBILITY="--private"
+
+    echo ""
+    echo -e "${BOLD}Project type:${NC}"
+    echo "  1) Flutter   2) Node.js   3) Vue"
+    echo "  4) .NET      5) Web       6) Empty"
+    read -p "Choice [1-6]: " TYPE
+    [[ "$TYPE" != "6" ]] && write_gitignore "$TYPE"
+
+    if [ ! -f README.md ]; then
+        printf "# %s\n\n> Created with Developer CLI Toolkit 🚀\n\n## Getting Started\n\n_Add project description here._\n" "$REPO_NAME" > README.md
+        log_success "README.md created"
+    fi
+
+    read -p "Initial commit message (default: 'Initial commit'): " MSG
+    MSG="${MSG:-Initial commit}"
+    git add . && git commit -m "$MSG"
+
+    log_step "Creating GitHub repository..."
+    if gh repo create "$REPO_NAME" $VISIBILITY --source=. --remote=origin; then
+        git branch -M main && git push -u origin main
+        log_success "Repository created and pushed!"
+        GH_USER=$(gh api user -q .login 2>/dev/null)
+        [[ -n "$GH_USER" ]] && echo -e "${CYAN}🔗 https://github.com/$GH_USER/$REPO_NAME${NC}"
+        log_to_file "Repo created: $REPO_NAME"
+    else
+        log_error "Failed to create repository. Check 'gh auth status'."
+        exit 1
+    fi
+}
+
+# ──────────────────────────────────────
+# LOGS
+# ──────────────────────────────────────
+
+function show_logs() {
+    if [ -f "$LOG_FILE" ]; then
+        divider
+        echo -e "${BOLD}📋 Activity Log${NC}"
+        divider
+        tail -30 "$LOG_FILE"
+    else
+        log_warn "No logs yet."
+    fi
+}
+
+# ──────────────────────────────────────
+# INFO & HELP
+# ──────────────────────────────────────
+
+function show_info() {
+    divider
+    echo -e "${BOLD}   Developer CLI Toolkit v4${NC}"
+    divider
+    echo -e "${BOLD}Tools:${NC}"
+    for tool in git gh flutter docker node npm dotnet code; do
+        if command -v "$tool" &>/dev/null; then
+            VER=$($tool --version 2>/dev/null | head -1)
+            echo -e "  ${GREEN}✅ $tool${NC} — $VER"
+        else
+            echo -e "  ${RED}❌ $tool${NC} — not installed"
+        fi
+    done
+    echo ""
+    echo -e "${BOLD}SSH Keys:${NC}"
+    ls ~/.ssh/github_* 2>/dev/null | while read k; do
+        echo -e "  ${GREEN}🔑 $k${NC}"
+    done || echo -e "  ${YELLOW}None found${NC}"
+    echo ""
+    [ -f "$CONFIG_FILE" ] && {
+        echo -e "${BOLD}Config:${NC} $CONFIG_FILE"
+        source "$CONFIG_FILE"
+        echo -e "  Name   : $GIT_NAME"
+        echo -e "  Editor : $EDITOR_PREF"
+    }
+    divider
+}
+
+function show_help() {
+    divider
+    echo -e "${BOLD}   Developer CLI Toolkit v4${NC}"
+    divider
+    echo -e "${BOLD}${MAGENTA}📦 Repository${NC}"
+    echo -e "  ${GREEN}create-repo${NC}              إنشاء مستودع GitHub جديد"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}⚡ Git${NC}"
+    echo -e "  ${GREEN}push${NC} \"msg\"               add + commit + push"
+    echo -e "  ${GREEN}sync${NC}                     pull --rebase من الـ remote"
+    echo -e "  ${GREEN}status${NC}                   حالة المشروع والـ commits"
+    echo -e "  ${GREEN}log${NC}                      git log بشكل جميل"
+    echo -e "  ${GREEN}new-branch${NC} <name>        إنشاء branch جديد"
+    echo -e "  ${GREEN}switch-branch${NC}            التبديل بين الفروع"
+    echo -e "  ${GREEN}merge-clean${NC}              دمج branch وحذفه"
+    echo -e "  ${GREEN}clean-branches${NC}           حذف الفروع المدمجة"
+    echo -e "  ${GREEN}undo${NC}                     التراجع عن آخر commit"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}📂 Projects${NC}"
+    echo -e "  ${GREEN}save-project${NC} <name>      حفظ المشروع الحالي"
+    echo -e "  ${GREEN}goto${NC} <name>              الانتقال السريع لمشروع"
+    echo -e "  ${GREEN}projects${NC}                 قائمة المشاريع المحفوظة"
+    echo -e "  ${GREEN}remove-project${NC} <name>    حذف مشروع من القائمة"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}⚡ Flutter${NC}"
+    echo -e "  ${GREEN}flutter-new${NC} <name>       إنشاء مشروع Flutter"
+    echo -e "  ${GREEN}flutter-run${NC}              تشغيل على جهاز محدد"
+    echo -e "  ${GREEN}flutter-build${NC}            بناء APK / iOS / Web"
+    echo -e "  ${GREEN}flutter-test${NC}             تشغيل الاختبارات"
+    echo -e "  ${GREEN}flutter-upgrade${NC}          ترقية Flutter والـ packages"
+    echo -e "  ${GREEN}clean${NC}                    flutter clean"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🐳 Docker${NC}"
+    echo -e "  ${GREEN}docker-build${NC} <name>      بناء image"
+    echo -e "  ${GREEN}docker-run${NC} <name>        تشغيل container"
+    echo -e "  ${GREEN}docker-list${NC}              عرض images والـ containers"
+    echo -e "  ${GREEN}docker-stop${NC}              إيقاف كل الـ containers"
+    echo -e "  ${GREEN}docker-clean${NC}             تنظيف Docker"
+    echo -e "  ${GREEN}compose-up${NC}               docker compose up -d"
+    echo -e "  ${GREEN}compose-down${NC}             docker compose down"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🟢 Node.js / Vue${NC}"
+    echo -e "  ${GREEN}npm-install${NC}              npm install"
+    echo -e "  ${GREEN}npm-run${NC} <script>         npm run <script>"
+    echo -e "  ${GREEN}npm-build${NC}                npm run build"
+    echo -e "  ${GREEN}vue-new${NC} <name>           إنشاء مشروع Vue"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}💜 .NET${NC}"
+    echo -e "  ${GREEN}dotnet-new${NC} <name>        إنشاء مشروع .NET"
+    echo -e "  ${GREEN}dotnet-run${NC}               تشغيل المشروع"
+    echo -e "  ${GREEN}dotnet-build${NC}             بناء المشروع"
+    echo -e "  ${GREEN}dotnet-test${NC}              تشغيل الاختبارات"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🌐 Web${NC}"
+    echo -e "  ${GREEN}web-serve${NC} [port]         تشغيل local server"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🔧 Other${NC}"
+    echo -e "  ${GREEN}ssh-check${NC}                إعداد SSH keys"
+    echo -e "  ${GREEN}config${NC}                   تعديل الإعدادات"
+    echo -e "  ${GREEN}info${NC}                     معلومات البيئة"
+    echo -e "  ${GREEN}logs${NC}                     سجل النشاط"
+    echo -e "  ${GREEN}help${NC}                     هذه القائمة"
+    divider
+    echo -e "${BOLD}Usage:${NC} dev <command> [args]"
+    echo -e "Example: ${CYAN}dev push \"fix login bug\"${NC}"
+    divider
+}
+
+# ──────────────────────────────────────
+# DISPATCHER
+# ──────────────────────────────────────
+
+case "$COMMAND" in
+    # Repo
+    create-repo)    create_repo ;;
+    # Git
+    push)           quick_push ;;
+    sync)           sync_repo ;;
+    status)         git_status ;;
+    log)            git_log ;;
+    new-branch)     new_branch ;;
+    switch-branch)  switch_branch ;;
+    merge-clean)    merge_and_clean ;;
+    clean-branches) clean_branches ;;
+    undo)           undo_commit ;;
+    # Projects
+    save-project)   save_project ;;
+    goto)           goto_project ;;
+    projects)       list_projects ;;
+    remove-project) remove_project ;;
+    # Flutter
+    flutter-new)    flutter_new ;;
+    flutter-run)    flutter_run_device ;;
+    flutter-build)  flutter_build ;;
+    flutter-test)   flutter_test ;;
+    flutter-upgrade) flutter_upgrade ;;
+    clean)          flutter clean && log_success "Cleaned!" ;;
+    # Docker
+    docker-build)   docker_build "$ARG1" ;;
+    docker-run)     docker_run "$ARG1" ;;
+    docker-list)    docker_list ;;
+    docker-stop)    docker_stop_all ;;
+    docker-clean)   docker_clean ;;
+    compose-up)     docker_compose_up ;;
+    compose-down)   docker_compose_down ;;
+    # Node / Vue
+    npm-install)    node_install ;;
+    npm-run)        node_run ;;
+    npm-build)      node_build ;;
+    vue-new)        vue_new ;;
+    # .NET
+    dotnet-new)     dotnet_new ;;
+    dotnet-run)     dotnet_run ;;
+    dotnet-build)   dotnet_build ;;
+    dotnet-test)    dotnet_test ;;
+    # Web
+    web-serve)      web_serve ;;
+    # Other
+    ssh-check)      check_ssh ;;
+    config)         edit_config ;;
+    info)           show_info ;;
+    logs)           show_logs ;;
+    help|--help|-h) show_help ;;
+    *)              show_help ;;
+esac
