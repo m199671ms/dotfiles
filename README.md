@@ -23,6 +23,7 @@
   - [.NET](#-net)
   - [Web](#-web)
   - [Aliases](#-aliases)
+  - [Doctor](#-doctor)
   - [أوامر أخرى](#-أوامر-أخرى)
 - [نظام الإشعارات](#-نظام-الإشعارات)
 - [التحديث التلقائي](#-التحديث-التلقائي)
@@ -478,6 +479,64 @@ dev alias-remove r
 
 ---
 
+### 🏥 Doctor
+
+#### `dev doctor`
+فحص شامل لبيئة التطوير واكتشاف المشاكل وإصلاحها تلقائياً.
+
+```bash
+dev doctor
+```
+
+**ما يفحصه:**
+
+| الفحص | الإجراء عند وجود مشكلة |
+|-------|------------------------|
+| Git config (name, email) | يطلب منك الإدخال ويضبطه |
+| SSH keys لـ GitHub | يخبرك بطريقة الإنشاء |
+| Flutter doctor | يشغّل `flutter doctor` ويعرض الملخص |
+| CocoaPods (macOS) | يشغّل `pod repo update` تلقائياً |
+| Android SDK | يتحقق من `ANDROID_HOME` |
+| Docker | يتحقق من تشغيل الـ daemon |
+| GitHub CLI auth | يتحقق من `gh auth status` |
+| Node.js / npm | يتحقق من الإصدار |
+| disk space | يحذّر إذا كانت المساحة أقل من 5GB |
+
+**مثال على الناتج:**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏥 Dev Doctor — macOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Git installed        — git version 2.39.0
+✅ Git name             — Mohammed Saeed
+✅ Git email            — user@gmail.com
+✅ GitHub CLI           — logged in as m199671ms
+✅ SSH key (personal)   — found
+⚠️  SSH key (company)   — not found
+✅ Flutter              — Flutter 3.16.0
+⚠️  CocoaPods           — out of date → fixing...
+✅ CocoaPods            — fixed!
+✅ Docker               — running
+❌ Android SDK          — ANDROID_HOME not set
+✅ Node.js              — v20.10.0
+✅ Disk space           — 45.2 GB free
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  2 warnings  |  ❌ 1 error
+Run 'dev doctor --fix' to auto-fix all issues
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+```bash
+# فحص فقط بدون إصلاح
+dev doctor
+
+# فحص وإصلاح تلقائي لكل المشاكل
+dev doctor --fix
+```
+
+---
+
 ### 🔧 أوامر أخرى
 
 #### `dev ssh-check`
@@ -635,6 +694,7 @@ dev rollback
 
 ```bash
 # بداية يوم العمل
+dev doctor              # فحص البيئة وإصلاح أي مشاكل
 dev goto myapp          # الانتقال للمشروع
 dev sync                # سحب آخر التغييرات
 dev flutter-run         # تشغيل التطبيق
