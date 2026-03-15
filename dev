@@ -195,6 +195,10 @@ function run_with_notify() {
 function self_update() {
     require_command gh
 
+    # تأكد من تحميل الـ SSH key الصحيح تلقائياً
+    eval "$(ssh-agent -s)" > /dev/null
+    ssh-add "$HOME_DIR/.ssh/github_personal" > /dev/null 2>&1
+
     divider
     echo -e "${BOLD}🔄 Checking for updates...${NC}"
     divider
