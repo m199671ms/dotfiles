@@ -1,12 +1,17 @@
 #!/bin/bash
 
 # =====================================
-# 🚀 Developer CLI Toolkit v4
+# 🚀 Developer CLI Toolkit v5
 # =====================================
 
 COMMAND=$1
 ARG1=$2
 ARG2=$3
+
+# --- Version & Update ---
+SCRIPT_VERSION="1.1.0"
+SCRIPT_PATH="$(realpath "$0")"
+GITHUB_RAW_URL="https://raw.githubusercontent.com/m199671ms/dotfiles/main/dev"
 
 # --- Colors ---
 RED="\033[0;31m"
@@ -54,6 +59,165 @@ function require_git_repo() {
 function confirm() {
     read -p "$1 (y/n): " _CONFIRM
     [[ "$_CONFIRM" == "y" ]]
+}
+
+# ──────────────────────────────────────
+# NOTIFICATIONS
+# ──────────────────────────────────────
+
+function notify() {
+    local TITLE=$1
+    local MESSAGE=$2
+    local SUCCESS=$3
+
+    # macOS
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        local SOUND="Glass"
+        [[ "$SUCCESS" == "false" ]] && SOUND="Basso"
+        osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\" sound name \"$SOUND\"" 2>/dev/null
+
+    # Linux
+    elif command -v notify-send &>/dev/null; then
+        local ICON="dialog-information"
+        [[ "$SUCCESS" == "false" ]] && ICON="dialog-error"
+        notify-send -i "$ICON" "$TITLE" "$MESSAGE" 2>/dev/null
+    fi
+
+    # terminal output دائماً
+    if [[ "$SUCCESS" == "false" ]]; then
+        log_error "$TITLE — $MESSAGE"
+    else
+        log_success "$TITLE — $MESSAGE"
+    fi
+}
+
+function run_with_notify() {
+    local TITLE=$1
+    local CMD=$2
+
+    local START=$(date +%s)
+    eval "$CMD"
+    local EXIT_CODE=$?
+    local END=$(date +%s)
+    local DURATION=$((END - START))
+
+    local TIME_STR=""
+    if   (( DURATION >= 3600 )); then
+        TIME_STR="$((DURATION/3600))h $((DURATION%3600/60))m"
+    elif (( DURATION >= 60 )); then
+        TIME_STR="$((DURATION/60))m $((DURATION%60))s"
+    else
+        TIME_STR="${DURATION}s"
+    fi
+
+    if [ $EXIT_CODE -eq 0 ]; then
+        notify "✅ $TITLE" "اكتمل في $TIME_STR" "true"
+        log_to_file "$TITLE completed in $TIME_STR"
+    else
+        notify "❌ $TITLE" "فشل بعد $TIME_STR" "false"
+        log_to_file "$TITLE FAILED after $TIME_STR"
+    fi
+
+    return $EXIT_CODE
+}
+
+# ──────────────────────────────────────
+# SELF UPDATE
+# ──────────────────────────────────────
+
+function self_update() {
+    require_command curl
+
+    divider
+    echo -e "${BOLD}🔄 Checking for updates...${NC}"
+    divider
+
+    local TMP_FILE=$(mktemp)
+    local HTTP_CODE
+
+    HTTP_CODE=$(curl -s -o "$TMP_FILE" -w "%{http_code}" "$GITHUB_RAW_URL")
+
+    if [[ "$HTTP_CODE" != "200" ]]; then
+        log_error "Could not reach update server. (HTTP $HTTP_CODE)"
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
+
+    if ! head -1 "$TMP_FILE" | grep -q "bash"; then
+        log_error "Downloaded file doesn't look like a valid script."
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
+
+    local REMOTE_VERSION
+    REMOTE_VERSION=$(grep 'SCRIPT_VERSION=' "$TMP_FILE" | head -1 | cut -d'"' -f2)
+
+    if [[ -z "$REMOTE_VERSION" ]]; then
+        log_warn "Could not determine remote version."
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
+
+    echo -e "  Current version : ${YELLOW}$SCRIPT_VERSION${NC}"
+    echo -e "  Latest version  : ${GREEN}$REMOTE_VERSION${NC}"
+    echo ""
+
+    if [[ "$SCRIPT_VERSION" == "$REMOTE_VERSION" ]]; then
+        log_success "Already up to date!"
+        rm -f "$TMP_FILE"
+        return 0
+    fi
+
+    read -p "Update to v$REMOTE_VERSION? (y/n): " CONFIRM
+    if [[ "$CONFIRM" != "y" ]]; then
+        log_warn "Update cancelled."
+        rm -f "$TMP_FILE"
+        return 0
+    fi
+
+    # نسخة احتياطية
+    local BACKUP_PATH="${SCRIPT_PATH}.backup_v${SCRIPT_VERSION}"
+    cp "$SCRIPT_PATH" "$BACKUP_PATH"
+    log_info "Backup saved: $BACKUP_PATH"
+
+    mv "$TMP_FILE" "$SCRIPT_PATH"
+    chmod +x "$SCRIPT_PATH"
+
+    log_success "Updated to v$REMOTE_VERSION successfully!"
+    log_to_file "Script updated: $SCRIPT_VERSION → $REMOTE_VERSION"
+    echo -e "${CYAN}ℹ️  Changes will apply on next run.${NC}"
+}
+
+function self_rollback() {
+    divider
+    echo -e "${BOLD}⏪ Rollback${NC}"
+    divider
+
+    local BACKUPS=($(ls "${SCRIPT_PATH}.backup_v"* 2>/dev/null | sort -r))
+
+    if [[ ${#BACKUPS[@]} -eq 0 ]]; then
+        log_error "No backups found."
+        return 1
+    fi
+
+    echo -e "${BOLD}Available backups:${NC}"
+    for i in "${!BACKUPS[@]}"; do
+        local VER=$(echo "${BACKUPS[$i]}" | grep -o 'v[0-9.]*$')
+        echo "  $((i+1))) $VER — ${BACKUPS[$i]}"
+    done
+    echo ""
+
+    read -p "Choose backup [1-${#BACKUPS[@]}]: " CHOICE
+    local INDEX=$((CHOICE - 1))
+
+    if [[ -z "${BACKUPS[$INDEX]}" ]]; then
+        log_error "Invalid choice."
+        return 1
+    fi
+
+    cp "${BACKUPS[$INDEX]}" "$SCRIPT_PATH"
+    chmod +x "$SCRIPT_PATH"
+    log_success "Rolled back to $(echo "${BACKUPS[$INDEX]}" | grep -o 'v[0-9.]*$')!"
 }
 
 # ──────────────────────────────────────
@@ -137,7 +301,6 @@ function check_ssh() {
 # GIT HELPERS
 # ──────────────────────────────────────
 
-# add + commit + push بأمر واحد
 function quick_push() {
     require_git_repo
     local MSG=$ARG1
@@ -156,7 +319,6 @@ function quick_push() {
     fi
 }
 
-# عرض حالة المشروع
 function git_status() {
     require_git_repo
     divider
@@ -176,7 +338,6 @@ function git_status() {
     divider
 }
 
-# إنشاء branch جديد
 function new_branch() {
     require_git_repo
     local BRANCH=$ARG1
@@ -188,7 +349,6 @@ function new_branch() {
         || log_error "Failed to create branch."
 }
 
-# التبديل بين الفروع
 function switch_branch() {
     require_git_repo
     echo -e "${BOLD}Available branches:${NC}"
@@ -200,7 +360,6 @@ function switch_branch() {
         || log_error "Failed to switch branch."
 }
 
-# دمج branch وحذفه
 function merge_and_clean() {
     require_git_repo
     CURRENT=$(git branch --show-current)
@@ -214,7 +373,6 @@ function merge_and_clean() {
         || log_error "Merge failed."
 }
 
-# التراجع عن آخر commit
 function undo_commit() {
     require_git_repo
     git reset --soft HEAD~1 \
@@ -222,7 +380,6 @@ function undo_commit() {
         || log_error "Failed to undo commit."
 }
 
-# سحب آخر التغييرات مع rebase
 function sync_repo() {
     require_git_repo
     BRANCH=$(git branch --show-current)
@@ -232,7 +389,6 @@ function sync_repo() {
         || log_error "Sync failed. Resolve conflicts then run 'git rebase --continue'."
 }
 
-# حذف الـ branches المدمجة
 function clean_branches() {
     require_git_repo
     log_step "Deleting merged branches..."
@@ -241,7 +397,6 @@ function clean_branches() {
         || log_warn "No merged branches to clean."
 }
 
-# عرض git log بشكل جميل
 function git_log() {
     require_git_repo
     git log --graph --oneline --decorate --all --color | head -30
@@ -257,7 +412,6 @@ function save_project() {
     [[ -z "$NAME" ]] && log_error "Alias is required." && exit 1
 
     touch "$PROJECTS_FILE"
-    # حذف القديم إن وجد
     grep -v "^$NAME=" "$PROJECTS_FILE" > /tmp/_proj_tmp && mv /tmp/_proj_tmp "$PROJECTS_FILE"
     echo "$NAME=$(pwd)" >> "$PROJECTS_FILE"
     log_success "Project '$NAME' saved → $(pwd)"
@@ -328,6 +482,26 @@ function flutter_new() {
 function flutter_run_device() {
     require_command flutter
 
+    # إذا أعطيت اسم مشروع أو مسار
+    if [[ -n "$ARG1" ]]; then
+        local TARGET_PATH=""
+        if [[ -d "$ARG1" ]]; then
+            TARGET_PATH="$ARG1"
+        elif grep -q "^$ARG1=" "$PROJECTS_FILE" 2>/dev/null; then
+            TARGET_PATH=$(grep "^$ARG1=" "$PROJECTS_FILE" | cut -d= -f2)
+        else
+            log_error "Project '$ARG1' not found."
+            exit 1
+        fi
+        log_step "Switching to: $TARGET_PATH"
+        cd "$TARGET_PATH" || exit 1
+    fi
+
+    if [ ! -f "pubspec.yaml" ]; then
+        log_error "No Flutter project found in: $(pwd)"
+        exit 1
+    fi
+
     divider
     echo -e "${BOLD}⚡ Flutter Run${NC}"
     divider
@@ -339,10 +513,9 @@ function flutter_run_device() {
     divider
     read -p "Choice [1-5]: " CHOICE
 
-    # دالة داخلية لإصلاح CocoaPods تلقائياً
     function _fix_cocoapods() {
         log_warn "CocoaPods dependency issue detected. Fixing automatically..."
-        
+
         if [ ! -d "ios" ]; then
             log_error "No ios folder found."
             return 1
@@ -350,7 +523,6 @@ function flutter_run_device() {
 
         cd ios
 
-        # المحاولة الأولى: تحديث الـ pod المشكلة فقط
         log_step "Attempt 1: Updating conflicting pods..."
         if pod update sqlite3 > /dev/null 2>&1; then
             log_success "Pods updated successfully."
@@ -358,7 +530,6 @@ function flutter_run_device() {
             return 0
         fi
 
-        # المحاولة الثانية: تحديث كل الـ repos
         log_step "Attempt 2: Updating CocoaPods repos..."
         if pod repo update > /dev/null 2>&1 && pod install > /dev/null 2>&1; then
             log_success "CocoaPods repos updated."
@@ -366,7 +537,6 @@ function flutter_run_device() {
             return 0
         fi
 
-        # المحاولة الثالثة: deintegrate كامل
         log_step "Attempt 3: Full CocoaPods reinstall..."
         pod deintegrate > /dev/null 2>&1
         if pod install --repo-update > /dev/null 2>&1; then
@@ -376,74 +546,62 @@ function flutter_run_device() {
         fi
 
         cd ..
-        log_error "Could not fix CocoaPods automatically. Try manually: cd ios && pod install --repo-update"
+        log_error "Could not fix CocoaPods automatically. Try: cd ios && pod install --repo-update"
         return 1
     }
 
-    # دالة تشغيل مع كشف الأخطاء ومعالجتها
     function _run_with_error_handling() {
-    local DEVICE_FLAG=$1
-    local MAX_RETRIES=2
-    local ATTEMPT=0
+        local DEVICE_FLAG=$1
+        local MAX_RETRIES=2
+        local ATTEMPT=0
 
-    while [ $ATTEMPT -le $MAX_RETRIES ]; do
-        ATTEMPT=$((ATTEMPT + 1))
-        log_step "Launching Flutter app (attempt $ATTEMPT)..."
+        while [ $ATTEMPT -le $MAX_RETRIES ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            log_step "Launching Flutter app (attempt $ATTEMPT)..."
 
-        # ملف مؤقت لحفظ الـ output
-        local TMP_LOG=$(mktemp)
+            local TMP_LOG=$(mktemp)
+            flutter run $DEVICE_FLAG 2>&1 | tee "$TMP_LOG"
+            EXIT_CODE=${PIPESTATUS[0]}
+            OUTPUT=$(cat "$TMP_LOG")
+            rm -f "$TMP_LOG"
 
-        # تشغيل flutter وعرض الـ output مباشرة + حفظه
-        flutter run $DEVICE_FLAG 2>&1 | tee "$TMP_LOG"
-        EXIT_CODE=${PIPESTATUS[0]}
-
-        # قراءة الـ output للكشف عن الأخطاء
-        OUTPUT=$(cat "$TMP_LOG")
-        rm -f "$TMP_LOG"
-
-        # إذا خرج بنجاح أو المستخدم أغلق التطبيق بنفسه (q)
-        if [ $EXIT_CODE -eq 0 ]; then
-            log_success "Session ended."
-            return 0
-        fi
-
-        # كشف إذا التطبيق اشتغل فعلاً قبل ما يصير خطأ
-        if echo "$OUTPUT" | grep -q "Flutter run key commands\|Syncing files to device\|To hot reload\|Running with"; then
-            log_success "App was running successfully."
-            return 0
-        fi
-
-        # كشف مشكلة CocoaPods
-        if echo "$OUTPUT" | grep -q "CocoaPods.*out-of-date\|pod install\|CocoaPods could not find compatible"; then
-            log_warn "CocoaPods issue detected on attempt $ATTEMPT."
-            if [ $ATTEMPT -le $MAX_RETRIES ]; then
-                _fix_cocoapods && continue
+            if [ $EXIT_CODE -eq 0 ]; then
+                log_success "Session ended."
+                return 0
             fi
-        fi
 
-        # كشف مشكلة Gradle
-        if echo "$OUTPUT" | grep -q "Gradle\|gradle"; then
-            log_warn "Gradle issue detected. Cleaning and retrying..."
-            flutter clean > /dev/null 2>&1
-            flutter pub get > /dev/null 2>&1
-            continue
-        fi
+            if echo "$OUTPUT" | grep -q "Flutter run key commands\|Syncing files to device\|To hot reload\|Running with"; then
+                log_success "App was running successfully."
+                return 0
+            fi
 
-        # كشف مشكلة pub
-        if echo "$OUTPUT" | grep -q "pub get\|pubspec"; then
-            log_warn "Pub dependencies issue. Running flutter pub get..."
-            flutter pub get && continue
-        fi
+            if echo "$OUTPUT" | grep -q "CocoaPods.*out-of-date\|pod install\|CocoaPods could not find compatible"; then
+                log_warn "CocoaPods issue detected on attempt $ATTEMPT."
+                if [ $ATTEMPT -le $MAX_RETRIES ]; then
+                    _fix_cocoapods && continue
+                fi
+            fi
 
-        log_error "Launch failed. Exit code: $EXIT_CODE"
+            if echo "$OUTPUT" | grep -q "Gradle\|gradle"; then
+                log_warn "Gradle issue detected. Cleaning and retrying..."
+                flutter clean > /dev/null 2>&1
+                flutter pub get > /dev/null 2>&1
+                continue
+            fi
+
+            if echo "$OUTPUT" | grep -q "pub get\|pubspec"; then
+                log_warn "Pub dependencies issue. Running flutter pub get..."
+                flutter pub get && continue
+            fi
+
+            log_error "Launch failed. Exit code: $EXIT_CODE"
+            return 1
+        done
+
+        log_error "Failed after $MAX_RETRIES attempts."
         return 1
-    done
+    }
 
-    log_error "Failed after $MAX_RETRIES attempts."
-    return 1
-}
-
-    # تنفيذ الاختيار
     case $CHOICE in
         1)
             log_step "Fetching Android devices..."
@@ -504,11 +662,11 @@ function flutter_build() {
     echo "  5) Linux"
     read -p "Choice [1-5]: " CHOICE
     case $CHOICE in
-        1) flutter build apk --release  && log_success "APK (release) built!" ;;
-        2) flutter build apk --debug    && log_success "APK (debug) built!" ;;
-        3) flutter build ios            && log_success "iOS built!" ;;
-        4) flutter build web            && log_success "Web built!" ;;
-        5) flutter build linux          && log_success "Linux built!" ;;
+        1) run_with_notify "Flutter Build APK"   "flutter build apk --release" ;;
+        2) run_with_notify "Flutter Build APK"   "flutter build apk --debug"   ;;
+        3) run_with_notify "Flutter Build iOS"   "flutter build ios"           ;;
+        4) run_with_notify "Flutter Build Web"   "flutter build web"           ;;
+        5) run_with_notify "Flutter Build Linux" "flutter build linux"         ;;
         *) log_error "Invalid choice." ;;
     esac
 }
@@ -516,7 +674,7 @@ function flutter_build() {
 function flutter_test() {
     require_command flutter
     log_step "Running Flutter tests..."
-    flutter test && log_success "All tests passed!" || log_error "Tests failed."
+    run_with_notify "Flutter Tests" "flutter test"
 }
 
 function flutter_upgrade() {
@@ -541,9 +699,7 @@ function docker_build() {
     TAG="${TAG:-latest}"
 
     log_step "Building image: $NAME:$TAG"
-    docker build -t "$NAME:$TAG" . \
-        && log_success "Image '$NAME:$TAG' built!" \
-        || { log_error "Docker build failed."; exit 1; }
+    run_with_notify "Docker Build $NAME:$TAG" "docker build -t $NAME:$TAG ."
     log_to_file "Docker built: $NAME:$TAG"
 }
 
@@ -625,7 +781,7 @@ function node_run() {
 function node_build() {
     require_command npm
     log_step "Building project..."
-    npm run build && log_success "Build complete!" || log_error "Build failed."
+    run_with_notify "Node Build" "npm run build"
 }
 
 function vue_new() {
@@ -652,11 +808,11 @@ function dotnet_new() {
     read -p "Choice [1-5]: " CHOICE
     local TEMPLATE
     case $CHOICE in
-        1) TEMPLATE="console" ;;
-        2) TEMPLATE="webapi"  ;;
-        3) TEMPLATE="mvc"     ;;
-        4) TEMPLATE="blazorwasm" ;;
-        5) TEMPLATE="classlib" ;;
+        1) TEMPLATE="console"     ;;
+        2) TEMPLATE="webapi"      ;;
+        3) TEMPLATE="mvc"         ;;
+        4) TEMPLATE="blazorwasm"  ;;
+        5) TEMPLATE="classlib"    ;;
         *) log_error "Invalid choice." && exit 1 ;;
     esac
     local NAME=$ARG1
@@ -674,13 +830,13 @@ function dotnet_run() {
 function dotnet_build() {
     require_command dotnet
     log_step "Building .NET project..."
-    dotnet build && log_success "Build complete!" || log_error "Build failed."
+    run_with_notify ".NET Build" "dotnet build"
 }
 
 function dotnet_test() {
     require_command dotnet
     log_step "Running .NET tests..."
-    dotnet test && log_success "Tests passed!" || log_error "Tests failed."
+    run_with_notify ".NET Tests" "dotnet test"
 }
 
 # ──────────────────────────────────────
@@ -776,7 +932,8 @@ function show_logs() {
 
 function show_info() {
     divider
-    echo -e "${BOLD}   Developer CLI Toolkit v4${NC}"
+    echo -e "${BOLD}   Developer CLI Toolkit v5${NC}"
+    echo -e "   Version: ${CYAN}$SCRIPT_VERSION${NC}"
     divider
     echo -e "${BOLD}Tools:${NC}"
     for tool in git gh flutter docker node npm dotnet code; do
@@ -804,7 +961,8 @@ function show_info() {
 
 function show_help() {
     divider
-    echo -e "${BOLD}   Developer CLI Toolkit v4${NC}"
+    echo -e "${BOLD}   Developer CLI Toolkit v5${NC}"
+    echo -e "   Version: ${CYAN}$SCRIPT_VERSION${NC}"
     divider
     echo -e "${BOLD}${MAGENTA}📦 Repository${NC}"
     echo -e "  ${GREEN}create-repo${NC}              إنشاء مستودع GitHub جديد"
@@ -828,14 +986,14 @@ function show_help() {
     echo ""
     echo -e "${BOLD}${MAGENTA}⚡ Flutter${NC}"
     echo -e "  ${GREEN}flutter-new${NC} <name>       إنشاء مشروع Flutter"
-    echo -e "  ${GREEN}flutter-run${NC}              تشغيل على جهاز محدد"
-    echo -e "  ${GREEN}flutter-build${NC}            بناء APK / iOS / Web"
-    echo -e "  ${GREEN}flutter-test${NC}             تشغيل الاختبارات"
+    echo -e "  ${GREEN}flutter-run${NC} [name]       تشغيل على جهاز محدد"
+    echo -e "  ${GREEN}flutter-build${NC}            بناء APK / iOS / Web + إشعار"
+    echo -e "  ${GREEN}flutter-test${NC}             تشغيل الاختبارات + إشعار"
     echo -e "  ${GREEN}flutter-upgrade${NC}          ترقية Flutter والـ packages"
     echo -e "  ${GREEN}clean${NC}                    flutter clean"
     echo ""
     echo -e "${BOLD}${MAGENTA}🐳 Docker${NC}"
-    echo -e "  ${GREEN}docker-build${NC} <name>      بناء image"
+    echo -e "  ${GREEN}docker-build${NC} <name>      بناء image + إشعار"
     echo -e "  ${GREEN}docker-run${NC} <name>        تشغيل container"
     echo -e "  ${GREEN}docker-list${NC}              عرض images والـ containers"
     echo -e "  ${GREEN}docker-stop${NC}              إيقاف كل الـ containers"
@@ -846,14 +1004,14 @@ function show_help() {
     echo -e "${BOLD}${MAGENTA}🟢 Node.js / Vue${NC}"
     echo -e "  ${GREEN}npm-install${NC}              npm install"
     echo -e "  ${GREEN}npm-run${NC} <script>         npm run <script>"
-    echo -e "  ${GREEN}npm-build${NC}                npm run build"
+    echo -e "  ${GREEN}npm-build${NC}                npm run build + إشعار"
     echo -e "  ${GREEN}vue-new${NC} <name>           إنشاء مشروع Vue"
     echo ""
     echo -e "${BOLD}${MAGENTA}💜 .NET${NC}"
     echo -e "  ${GREEN}dotnet-new${NC} <name>        إنشاء مشروع .NET"
     echo -e "  ${GREEN}dotnet-run${NC}               تشغيل المشروع"
-    echo -e "  ${GREEN}dotnet-build${NC}             بناء المشروع"
-    echo -e "  ${GREEN}dotnet-test${NC}              تشغيل الاختبارات"
+    echo -e "  ${GREEN}dotnet-build${NC}             بناء المشروع + إشعار"
+    echo -e "  ${GREEN}dotnet-test${NC}              تشغيل الاختبارات + إشعار"
     echo ""
     echo -e "${BOLD}${MAGENTA}🌐 Web${NC}"
     echo -e "  ${GREEN}web-serve${NC} [port]         تشغيل local server"
@@ -863,10 +1021,13 @@ function show_help() {
     echo -e "  ${GREEN}config${NC}                   تعديل الإعدادات"
     echo -e "  ${GREEN}info${NC}                     معلومات البيئة"
     echo -e "  ${GREEN}logs${NC}                     سجل النشاط"
+    echo -e "  ${GREEN}update${NC}                   تحديث السكريبت من GitHub"
+    echo -e "  ${GREEN}rollback${NC}                 الرجوع لإصدار سابق"
     echo -e "  ${GREEN}help${NC}                     هذه القائمة"
     divider
     echo -e "${BOLD}Usage:${NC} dev <command> [args]"
     echo -e "Example: ${CYAN}dev push \"fix login bug\"${NC}"
+    echo -e "Example: ${CYAN}dev flutter-run myapp${NC}"
     divider
 }
 
@@ -876,54 +1037,56 @@ function show_help() {
 
 case "$COMMAND" in
     # Repo
-    create-repo)    create_repo ;;
+    create-repo)     create_repo ;;
     # Git
-    push)           quick_push ;;
-    sync)           sync_repo ;;
-    status)         git_status ;;
-    log)            git_log ;;
-    new-branch)     new_branch ;;
-    switch-branch)  switch_branch ;;
-    merge-clean)    merge_and_clean ;;
-    clean-branches) clean_branches ;;
-    undo)           undo_commit ;;
+    push)            quick_push ;;
+    sync)            sync_repo ;;
+    status)          git_status ;;
+    log)             git_log ;;
+    new-branch)      new_branch ;;
+    switch-branch)   switch_branch ;;
+    merge-clean)     merge_and_clean ;;
+    clean-branches)  clean_branches ;;
+    undo)            undo_commit ;;
     # Projects
-    save-project)   save_project ;;
-    goto)           goto_project ;;
-    projects)       list_projects ;;
-    remove-project) remove_project ;;
+    save-project)    save_project ;;
+    goto)            goto_project ;;
+    projects)        list_projects ;;
+    remove-project)  remove_project ;;
     # Flutter
-    flutter-new)    flutter_new ;;
-    flutter-run)    flutter_run_device ;;
-    flutter-build)  flutter_build ;;
-    flutter-test)   flutter_test ;;
+    flutter-new)     flutter_new ;;
+    flutter-run)     flutter_run_device ;;
+    flutter-build)   flutter_build ;;
+    flutter-test)    flutter_test ;;
     flutter-upgrade) flutter_upgrade ;;
-    clean)          flutter clean && log_success "Cleaned!" ;;
+    clean)           flutter clean && log_success "Cleaned!" ;;
     # Docker
-    docker-build)   docker_build "$ARG1" ;;
-    docker-run)     docker_run "$ARG1" ;;
-    docker-list)    docker_list ;;
-    docker-stop)    docker_stop_all ;;
-    docker-clean)   docker_clean ;;
-    compose-up)     docker_compose_up ;;
-    compose-down)   docker_compose_down ;;
+    docker-build)    docker_build "$ARG1" ;;
+    docker-run)      docker_run "$ARG1" ;;
+    docker-list)     docker_list ;;
+    docker-stop)     docker_stop_all ;;
+    docker-clean)    docker_clean ;;
+    compose-up)      docker_compose_up ;;
+    compose-down)    docker_compose_down ;;
     # Node / Vue
-    npm-install)    node_install ;;
-    npm-run)        node_run ;;
-    npm-build)      node_build ;;
-    vue-new)        vue_new ;;
+    npm-install)     node_install ;;
+    npm-run)         node_run ;;
+    npm-build)       node_build ;;
+    vue-new)         vue_new ;;
     # .NET
-    dotnet-new)     dotnet_new ;;
-    dotnet-run)     dotnet_run ;;
-    dotnet-build)   dotnet_build ;;
-    dotnet-test)    dotnet_test ;;
+    dotnet-new)      dotnet_new ;;
+    dotnet-run)      dotnet_run ;;
+    dotnet-build)    dotnet_build ;;
+    dotnet-test)     dotnet_test ;;
     # Web
-    web-serve)      web_serve ;;
+    web-serve)       web_serve ;;
     # Other
-    ssh-check)      check_ssh ;;
-    config)         edit_config ;;
-    info)           show_info ;;
-    logs)           show_logs ;;
-    help|--help|-h) show_help ;;
-    *)              show_help ;;
+    ssh-check)       check_ssh ;;
+    config)          edit_config ;;
+    info)            show_info ;;
+    logs)            show_logs ;;
+    update)          self_update ;;
+    rollback)        self_rollback ;;
+    help|--help|-h)  show_help ;;
+    *)               show_help ;;
 esac
