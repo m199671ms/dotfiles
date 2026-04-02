@@ -1,0 +1,87 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# config.sh — Configuration & SSH
+# ──────────────────────────────────────
+
+function load_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        divider
+        echo -e "${BOLD}⚙️  First time setup${NC}"
+        echo -e "   Platform: ${CYAN}$OS_TYPE${NC}"
+        divider
+        read -p "Personal GitHub email : " PERSONAL_EMAIL
+        read -p "Company GitHub email  : " COMPANY_EMAIL
+        read -p "Your full name        : " GIT_NAME
+        read -p "Default editor (code/vim/nano): " EDITOR_PREF
+        EDITOR_PREF="${EDITOR_PREF:-code}"
+        {
+            echo "PERSONAL_EMAIL=$PERSONAL_EMAIL"
+            echo "COMPANY_EMAIL=$COMPANY_EMAIL"
+            echo "GIT_NAME=$GIT_NAME"
+            echo "EDITOR_PREF=$EDITOR_PREF"
+        } > "$CONFIG_FILE"
+        git config --global user.name "$GIT_NAME"
+        log_success "Config saved at $CONFIG_FILE"
+    fi
+    source "$CONFIG_FILE"
+}
+
+function edit_config() {
+    load_config
+    echo -e "${BOLD}Current config:${NC}"
+    cat "$CONFIG_FILE"
+    echo ""
+    if confirm "Edit config?"; then
+        read -p "Personal email [$PERSONAL_EMAIL]: " _PE
+        read -p "Company email  [$COMPANY_EMAIL]: " _CE
+        read -p "Full name      [$GIT_NAME]: " _GN
+        read -p "Editor         [$EDITOR_PREF]: " _ED
+        {
+            echo "PERSONAL_EMAIL=${_PE:-$PERSONAL_EMAIL}"
+            echo "COMPANY_EMAIL=${_CE:-$COMPANY_EMAIL}"
+            echo "GIT_NAME=${_GN:-$GIT_NAME}"
+            echo "EDITOR_PREF=${_ED:-$EDITOR_PREF}"
+        } > "$CONFIG_FILE"
+        log_success "Config updated."
+    fi
+}
+
+function check_ssh() {
+    load_config
+    log_info "Checking SSH keys..."
+    local SSH_PATH="$HOME_DIR/.ssh"
+    mkdir -p "$SSH_PATH"
+
+    if [[ "$OS_TYPE" == "windows" ]]; then
+        if ! command -v ssh-keygen &>/dev/null; then
+            log_error "OpenSSH not found."
+            log_info "Install: Settings → Apps → Optional Features → OpenSSH Client"
+            exit 1
+        fi
+        powershell.exe -Command "
+            Set-Service ssh-agent -StartupType Automatic
+            Start-Service ssh-agent
+        " 2>/dev/null
+    fi
+
+    read -p "Account type (personal/company): " ACCOUNT
+    local KEY_NAME EMAIL_VAR
+    case "$ACCOUNT" in
+        personal) KEY_NAME="github_personal"; EMAIL_VAR="$PERSONAL_EMAIL" ;;
+        company)  KEY_NAME="github_company";  EMAIL_VAR="$COMPANY_EMAIL"  ;;
+        *) log_error "Invalid account. Use: personal or company"; exit 1 ;;
+    esac
+
+    if [ ! -f "$SSH_PATH/$KEY_NAME" ]; then
+        log_step "Generating SSH key for '$ACCOUNT'..."
+        ssh-keygen -t ed25519 -C "$EMAIL_VAR" -f "$SSH_PATH/$KEY_NAME" -N ""
+        echo -e "${GREEN}📋 Add this key to GitHub → Settings → SSH Keys:${NC}"
+        echo -e "${CYAN}$(cat "$SSH_PATH/$KEY_NAME.pub")${NC}"
+        read -p "Press Enter after adding to GitHub..."
+    fi
+
+    eval "$(ssh-agent -s)" > /dev/null
+    ssh-add "$SSH_PATH/$KEY_NAME" > /dev/null
+    log_success "SSH key loaded: $KEY_NAME"
+    log_to_file "SSH loaded: $KEY_NAME"
+}

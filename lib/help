@@ -1,0 +1,155 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# help.sh — Info, Logs & Help Display
+# ──────────────────────────────────────
+
+function show_logs() {
+    if [ -f "$LOG_FILE" ]; then
+        local TOTAL_LINES LOG_SIZE
+        TOTAL_LINES=$(wc -l < "$LOG_FILE")
+        LOG_SIZE=$(du -sh "$LOG_FILE" 2>/dev/null | cut -f1)
+
+        divider
+        echo -e "${BOLD}📋 Activity Log${NC}"
+        echo -e "   الملف : ${CYAN}$LOG_FILE${NC}"
+        echo -e "   الحجم : ${CYAN}$LOG_SIZE${NC}  |  السطور : ${CYAN}$TOTAL_LINES${NC}/1000"
+        divider
+
+        local SUCCESSES FAILURES
+        SUCCESSES=$(grep -c "completed in" "$LOG_FILE" 2>/dev/null || echo 0)
+        FAILURES=$(grep -c "FAILED after" "$LOG_FILE" 2>/dev/null || echo 0)
+        echo -e "  ${GREEN}✅ ناجح: $SUCCESSES${NC}   ${RED}❌ فاشل: $FAILURES${NC}"
+        divider
+
+        echo -e "${BOLD}آخر 30 حدث:${NC}"
+        echo ""
+        tail -30 "$LOG_FILE" | while IFS= read -r line; do
+            if echo "$line" | grep -q "FAILED"; then
+                echo -e "  ${RED}$line${NC}"
+            elif echo "$line" | grep -q "completed"; then
+                echo -e "  ${GREEN}$line${NC}"
+            elif echo "$line" | grep -q "rotated"; then
+                echo -e "  ${YELLOW}$line${NC}"
+            else
+                echo -e "  $line"
+            fi
+        done
+        divider
+        echo -e "  ${CYAN}لمسح اللوغ:${NC} rm $LOG_FILE"
+    else
+        log_warn "لا يوجد سجل بعد. ستظهر هنا الأحداث بعد أول أمر."
+    fi
+}
+
+function show_info() {
+    divider
+    echo -e "${BOLD}   Developer CLI Toolkit v6${NC}"
+    echo -e "   Version  : ${CYAN}$SCRIPT_VERSION${NC}"
+    echo -e "   Platform : ${CYAN}$OS_TYPE${NC}"
+    divider
+    echo -e "${BOLD}Tools:${NC}"
+    for tool in git gh flutter docker node npm dotnet code; do
+        if command -v "$tool" &>/dev/null; then
+            local VER
+            VER=$($tool --version 2>/dev/null | head -1)
+            echo -e "  ${GREEN}✅ $tool${NC} — $VER"
+        else
+            echo -e "  ${RED}❌ $tool${NC} — not installed"
+        fi
+    done
+    echo ""
+    echo -e "${BOLD}SSH Keys:${NC}"
+    while IFS= read -r k; do
+        echo -e "  ${GREEN}🔑 $k${NC}"
+    done < <(ls "$HOME_DIR/.ssh/github_"* 2>/dev/null) || echo -e "  ${YELLOW}None found${NC}"
+    echo ""
+    if [ -f "$CONFIG_FILE" ]; then
+        echo -e "${BOLD}Config:${NC} $CONFIG_FILE"
+        source "$CONFIG_FILE"
+        echo -e "  Name   : $GIT_NAME"
+        echo -e "  Editor : $EDITOR_PREF"
+    fi
+    divider
+}
+
+function show_help() {
+    divider
+    echo -e "${BOLD}   Developer CLI Toolkit v6${NC}"
+    echo -e "   Version: ${CYAN}$SCRIPT_VERSION${NC}  |  Platform: ${CYAN}$OS_TYPE${NC}"
+    divider
+    echo -e "${BOLD}${MAGENTA}📦 Repository${NC}"
+    echo -e "  ${GREEN}create-repo${NC}              إنشاء مستودع GitHub جديد"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}⚡ Git${NC}"
+    echo -e "  ${GREEN}push${NC} \"msg\"               add + commit + push"
+    echo -e "  ${GREEN}sync${NC}                     pull --rebase من الـ remote"
+    echo -e "  ${GREEN}status${NC}                   حالة المشروع والـ commits"
+    echo -e "  ${GREEN}log${NC}                      git log بشكل جميل"
+    echo -e "  ${GREEN}new-branch${NC} <n>        إنشاء branch جديد"
+    echo -e "  ${GREEN}switch-branch${NC}            التبديل بين الفروع"
+    echo -e "  ${GREEN}merge-clean${NC}              دمج branch وحذفه"
+    echo -e "  ${GREEN}clean-branches${NC}           حذف الفروع المدمجة"
+    echo -e "  ${GREEN}undo${NC}                     التراجع عن آخر commit"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}📂 Projects${NC}"
+    echo -e "  ${GREEN}save-project${NC} <n>      حفظ المشروع الحالي"
+    echo -e "  ${GREEN}goto${NC} <n>              الانتقال السريع لمشروع"
+    echo -e "  ${GREEN}projects${NC}                 قائمة المشاريع المحفوظة"
+    echo -e "  ${GREEN}remove-project${NC} <n>    حذف مشروع من القائمة"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}⚡ Flutter${NC}"
+    echo -e "  ${GREEN}flutter-new${NC} <n>       إنشاء مشروع Flutter"
+    echo -e "  ${GREEN}flutter-run${NC} [name]       تشغيل (خيارات حسب $OS_TYPE)"
+    echo -e "  ${GREEN}flutter-build${NC}            بناء + إشعار (حسب $OS_TYPE)"
+    echo -e "  ${GREEN}flutter-test${NC}             تشغيل الاختبارات + إشعار"
+    echo -e "  ${GREEN}flutter-upgrade${NC}          ترقية Flutter والـ packages"
+    echo -e "  ${GREEN}clean${NC}                    flutter clean"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🐳 Docker${NC}"
+    echo -e "  ${GREEN}docker-build${NC} <n>      بناء image + إشعار"
+    echo -e "  ${GREEN}docker-run${NC} <n>        تشغيل container"
+    echo -e "  ${GREEN}docker-list${NC}              عرض images والـ containers"
+    echo -e "  ${GREEN}docker-stop${NC}              إيقاف كل الـ containers"
+    echo -e "  ${GREEN}docker-clean${NC}             تنظيف Docker"
+    echo -e "  ${GREEN}compose-up${NC}               docker compose up -d"
+    echo -e "  ${GREEN}compose-down${NC}             docker compose down"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🟢 Node.js / Vue${NC}"
+    echo -e "  ${GREEN}npm-install${NC}              npm install"
+    echo -e "  ${GREEN}npm-run${NC} <script>         npm run <script>"
+    echo -e "  ${GREEN}npm-build${NC}                npm run build + إشعار"
+    echo -e "  ${GREEN}vue-new${NC} <n>           إنشاء مشروع Vue"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}💜 .NET${NC}"
+    echo -e "  ${GREEN}dotnet-new${NC} <n>        إنشاء مشروع .NET"
+    echo -e "  ${GREEN}dotnet-run${NC}               تشغيل المشروع"
+    echo -e "  ${GREEN}dotnet-build${NC}             بناء المشروع + إشعار"
+    echo -e "  ${GREEN}dotnet-test${NC}              تشغيل الاختبارات + إشعار"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🌐 Web${NC}"
+    echo -e "  ${GREEN}web-serve${NC} [port]         تشغيل local server"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🏥 Doctor${NC}"
+    echo -e "  ${GREEN}doctor${NC}                   فحص بيئة التطوير"
+    echo -e "  ${GREEN}doctor --fix${NC}             فحص وإصلاح تلقائي"
+    echo ""
+    echo -e "${BOLD}${MAGENTA}🔧 Other${NC}"
+    echo -e "  ${GREEN}ssh-check${NC}                إعداد SSH keys"
+    echo -e "  ${GREEN}config${NC}                   تعديل الإعدادات"
+    echo -e "  ${GREEN}info${NC}                     معلومات البيئة"
+    echo -e "  ${GREEN}logs${NC}                     سجل النشاط (مع إحصائيات)"
+    echo -e "  ${GREEN}update${NC}                   تحديث السكريبت من GitHub"
+    echo -e "  ${GREEN}rollback${NC}                 الرجوع لإصدار سابق"
+    echo -e "  ${GREEN}help${NC}                     هذه القائمة"
+    divider
+    echo -e "${BOLD}${MAGENTA}⚡ Aliases${NC}"
+    echo -e "  ${GREEN}alias-add${NC} <n> <cmd>   إضافة اختصار جديد"
+    echo -e "  ${GREEN}alias-remove${NC} <n>      حذف اختصار"
+    echo -e "  ${GREEN}alias-list${NC}            عرض كل الاختصارات"
+    echo ""
+    divider
+    echo -e "${BOLD}Usage:${NC} dev <command> [args]"
+    echo -e "Example: ${CYAN}dev push \"fix login bug\"${NC}"
+    echo -e "Example: ${CYAN}dev flutter-run myapp${NC}"
+    divider
+}

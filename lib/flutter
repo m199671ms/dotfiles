@@ -1,0 +1,219 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# flutter.sh — Flutter Operations
+# ──────────────────────────────────────
+
+function flutter_new() {
+    require_command flutter
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project name: " NAME
+    [[ -z "$NAME" ]] && log_error "Project name is required." && exit 1
+
+    read -p "Organization (e.g. com.company): " ORG
+    ORG="${ORG:-com.example}"
+
+    log_step "Creating Flutter project: $NAME"
+    flutter create --org "$ORG" "$NAME" \
+        && log_success "Flutter project '$NAME' created!" \
+        || { log_error "flutter create failed."; exit 1; }
+}
+
+function _fix_cocoapods() {
+    log_warn "CocoaPods dependency issue detected. Fixing automatically..."
+    if [ ! -d "ios" ]; then
+        log_error "No ios folder found."
+        return 1
+    fi
+    cd ios || return 1
+    log_step "Attempt 1: Updating conflicting pods..."
+    if pod update sqlite3 > /dev/null 2>&1; then
+        log_success "Pods updated successfully."
+        cd ..
+        return 0
+    fi
+    log_step "Attempt 2: Updating CocoaPods repos..."
+    if pod repo update > /dev/null 2>&1 && pod install > /dev/null 2>&1; then
+        log_success "CocoaPods repos updated."
+        cd ..
+        return 0
+    fi
+    log_step "Attempt 3: Full CocoaPods reinstall..."
+    pod deintegrate > /dev/null 2>&1
+    if pod install --repo-update > /dev/null 2>&1; then
+        log_success "CocoaPods reinstalled successfully."
+        cd ..
+        return 0
+    fi
+    cd ..
+    log_error "Could not fix CocoaPods. Try: cd ios && pod install --repo-update"
+    return 1
+}
+
+function _run_flutter_with_error_handling() {
+    local DEVICE_FLAG=$1
+    local MAX_RETRIES=2
+    local ATTEMPT=0
+
+    while [ $ATTEMPT -le $MAX_RETRIES ]; do
+        ATTEMPT=$((ATTEMPT + 1))
+        log_step "Launching Flutter app (attempt $ATTEMPT)..."
+
+        local TMP_LOG="$TMP_DIR/_flutter_run_log"
+        # shellcheck disable=SC2086
+        flutter run $DEVICE_FLAG 2>&1 | tee "$TMP_LOG"
+        local EXIT_CODE=${PIPESTATUS[0]}
+        local OUTPUT
+        OUTPUT=$(cat "$TMP_LOG")
+        rm -f "$TMP_LOG"
+
+        if [ $EXIT_CODE -eq 0 ]; then
+            log_success "Session ended."
+            return 0
+        fi
+
+        if echo "$OUTPUT" | grep -q "Flutter run key commands\|Syncing files to device\|To hot reload\|Running with"; then
+            log_success "App was running successfully."
+            return 0
+        fi
+
+        if echo "$OUTPUT" | grep -q "CocoaPods.*out-of-date\|pod install\|CocoaPods could not find compatible"; then
+            log_warn "CocoaPods issue detected on attempt $ATTEMPT."
+            [ $ATTEMPT -le $MAX_RETRIES ] && _fix_cocoapods && continue
+        fi
+
+        if echo "$OUTPUT" | grep -q "Gradle\|gradle"; then
+            log_warn "Gradle issue detected. Cleaning and retrying..."
+            flutter clean > /dev/null 2>&1
+            flutter pub get > /dev/null 2>&1
+            continue
+        fi
+
+        if echo "$OUTPUT" | grep -q "pub get\|pubspec"; then
+            log_warn "Pub dependencies issue. Running flutter pub get..."
+            flutter pub get && continue
+        fi
+
+        log_error "Launch failed. Exit code: $EXIT_CODE"
+        return 1
+    done
+
+    log_error "Failed after $MAX_RETRIES attempts."
+    return 1
+}
+
+function flutter_run_device() {
+    require_command flutter
+
+    if [[ -n "$ARG1" ]]; then
+        local TARGET_PATH=""
+        if [[ -d "$ARG1" ]]; then
+            TARGET_PATH="$ARG1"
+        elif grep -q "^$ARG1=" "$PROJECTS_FILE" 2>/dev/null; then
+            TARGET_PATH=$(grep "^$ARG1=" "$PROJECTS_FILE" | cut -d= -f2)
+        else
+            log_error "Project '$ARG1' not found."
+            exit 1
+        fi
+        log_step "Switching to: $TARGET_PATH"
+        cd "$TARGET_PATH" || exit 1
+    fi
+
+    if [ ! -f "pubspec.yaml" ]; then
+        log_error "No Flutter project found in: $(pwd)"
+        exit 1
+    fi
+
+    divider
+    echo -e "${BOLD}⚡ Flutter Run${NC}"
+    echo -e "   Platform: ${CYAN}$OS_TYPE${NC}"
+    divider
+
+    local CHOICE
+    case "$OS_TYPE" in
+        macos)
+            echo "  1) Android  2) iOS  3) macOS  4) Web  5) جهاز محدد"
+            read -p "Choice: " CHOICE
+            case $CHOICE in
+                1) read -p "Device ID (empty = first): " D; _run_flutter_with_error_handling "-d ${D:-android}" ;;
+                2) read -p "Device ID (empty = first): " D; _run_flutter_with_error_handling "-d ${D:-ios}" ;;
+                3) _run_flutter_with_error_handling "-d macos" ;;
+                4) read -p "Browser (chrome/edge): " B; _run_flutter_with_error_handling "-d ${B:-chrome}" ;;
+                5) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "Required."; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
+                *) log_error "Invalid choice." && exit 1 ;;
+            esac ;;
+        windows)
+            echo "  1) Android  2) Windows  3) Web  4) جهاز محدد"
+            read -p "Choice: " CHOICE
+            case $CHOICE in
+                1) read -p "Device ID (empty = first): " D; _run_flutter_with_error_handling "-d ${D:-android}" ;;
+                2) _run_flutter_with_error_handling "-d windows" ;;
+                3) read -p "Browser (chrome/edge): " B; _run_flutter_with_error_handling "-d ${B:-chrome}" ;;
+                4) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "Required."; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
+                *) log_error "Invalid choice." && exit 1 ;;
+            esac ;;
+        linux)
+            echo "  1) Android  2) Linux  3) Web  4) جهاز محدد"
+            read -p "Choice: " CHOICE
+            case $CHOICE in
+                1) read -p "Device ID (empty = first): " D; _run_flutter_with_error_handling "-d ${D:-android}" ;;
+                2) _run_flutter_with_error_handling "-d linux" ;;
+                3) read -p "Browser (chrome/edge): " B; _run_flutter_with_error_handling "-d ${B:-chrome}" ;;
+                4) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "Required."; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
+                *) log_error "Invalid choice." && exit 1 ;;
+            esac ;;
+    esac
+}
+
+function flutter_build() {
+    require_command flutter
+    echo -e "${BOLD}Build target:${NC}"
+    echo "  1) APK (release)  2) APK (debug)"
+    case "$OS_TYPE" in
+        macos)   echo "  3) iOS  4) Web  5) macOS" ;;
+        windows) echo "  3) Windows  4) Web" ;;
+        linux)   echo "  3) Linux  4) Web" ;;
+    esac
+    read -p "Choice: " CHOICE
+
+    # FIX: استبدال eval بتمرير الأمر مباشرة
+    case "$OS_TYPE" in
+        macos)
+            case $CHOICE in
+                1) run_with_notify "Flutter Build APK"   flutter build apk --release ;;
+                2) run_with_notify "Flutter Build APK"   flutter build apk --debug   ;;
+                3) run_with_notify "Flutter Build iOS"   flutter build ios           ;;
+                4) run_with_notify "Flutter Build Web"   flutter build web           ;;
+                5) run_with_notify "Flutter Build macOS" flutter build macos         ;;
+                *) log_error "Invalid choice." ;;
+            esac ;;
+        windows)
+            case $CHOICE in
+                1) run_with_notify "Flutter Build APK"     flutter build apk --release ;;
+                2) run_with_notify "Flutter Build APK"     flutter build apk --debug   ;;
+                3) run_with_notify "Flutter Build Windows" flutter build windows       ;;
+                4) run_with_notify "Flutter Build Web"     flutter build web           ;;
+                *) log_error "Invalid choice." ;;
+            esac ;;
+        linux)
+            case $CHOICE in
+                1) run_with_notify "Flutter Build APK"   flutter build apk --release ;;
+                2) run_with_notify "Flutter Build APK"   flutter build apk --debug   ;;
+                3) run_with_notify "Flutter Build Linux" flutter build linux         ;;
+                4) run_with_notify "Flutter Build Web"   flutter build web           ;;
+                *) log_error "Invalid choice." ;;
+            esac ;;
+    esac
+}
+
+function flutter_test() {
+    require_command flutter
+    log_step "Running Flutter tests..."
+    run_with_notify "Flutter Tests" flutter test
+}
+
+function flutter_upgrade() {
+    require_command flutter
+    log_step "Upgrading Flutter..."
+    flutter upgrade && flutter pub upgrade
+    log_success "Flutter upgraded!"
+}

@@ -1,0 +1,83 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# docker.sh — Docker Operations
+# ──────────────────────────────────────
+
+function docker_build() {
+    require_command docker
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Image name: " NAME
+    [[ -z "$NAME" ]] && log_error "Image name is required." && exit 1
+    [ ! -f Dockerfile ] && { log_error "No Dockerfile found in current directory."; exit 1; }
+
+    read -p "Tag (default: latest): " TAG
+    TAG="${TAG:-latest}"
+
+    log_step "Building image: $NAME:$TAG"
+    # FIX: استبدال eval بتمرير الأمر مباشرة
+    run_with_notify "Docker Build $NAME:$TAG" docker build -t "$NAME:$TAG" .
+    log_to_file "Docker built: $NAME:$TAG"
+}
+
+function docker_run() {
+    require_command docker
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Image name: " NAME
+    [[ -z "$NAME" ]] && log_error "Image name is required." && exit 1
+
+    read -p "Port mapping (e.g. 8080:80, empty to skip): " PORT
+    read -p "Container name (empty to skip): " CNAME
+
+    local DOCKER_ARGS=(-it --rm)
+    [[ -n "$PORT"  ]] && DOCKER_ARGS+=(-p "$PORT")
+    [[ -n "$CNAME" ]] && DOCKER_ARGS+=(--name "$CNAME")
+
+    log_step "Running container: $NAME"
+    docker run "${DOCKER_ARGS[@]}" "$NAME"
+}
+
+function docker_list() {
+    require_command docker
+    divider
+    echo -e "${BOLD}🐳 Images${NC}"
+    divider
+    docker images
+    echo ""
+    divider
+    echo -e "${BOLD}🐳 Running Containers${NC}"
+    divider
+    docker ps
+}
+
+function docker_stop_all() {
+    require_command docker
+    log_step "Stopping all running containers..."
+    local RUNNING
+    RUNNING=$(docker ps -q)
+    if [[ -n "$RUNNING" ]]; then
+        # shellcheck disable=SC2086
+        docker stop $RUNNING && log_success "All containers stopped."
+    else
+        log_warn "No running containers."
+    fi
+}
+
+function docker_clean() {
+    require_command docker
+    log_warn "This will remove all stopped containers and unused images."
+    confirm "Continue?" || exit 0
+    docker system prune -f && log_success "Docker cleaned!"
+}
+
+function docker_compose_up() {
+    require_command docker
+    [ ! -f docker-compose.yml ] && { log_error "No docker-compose.yml found."; exit 1; }
+    log_step "Starting services..."
+    docker compose up -d && log_success "Services started!" || log_error "Failed."
+}
+
+function docker_compose_down() {
+    require_command docker
+    log_step "Stopping services..."
+    docker compose down && log_success "Services stopped." || log_error "Failed."
+}

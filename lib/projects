@@ -1,0 +1,59 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# projects.sh — Project Manager
+# ──────────────────────────────────────
+
+function save_project() {
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project alias: " NAME
+    [[ -z "$NAME" ]] && log_error "Alias is required." && exit 1
+
+    touch "$PROJECTS_FILE"
+    grep -v "^$NAME=" "$PROJECTS_FILE" > "$TMP_DIR/_proj_tmp" \
+        && mv "$TMP_DIR/_proj_tmp" "$PROJECTS_FILE"
+    echo "$NAME=$(pwd)" >> "$PROJECTS_FILE"
+    log_success "Project '$NAME' saved → $(pwd)"
+}
+
+function goto_project() {
+    local NAME=$ARG1
+    if [[ -z "$NAME" ]]; then
+        list_projects
+        read -p "Project name: " NAME
+    fi
+    local PROJ_PATH
+    PROJ_PATH=$(grep "^$NAME=" "$PROJECTS_FILE" 2>/dev/null | cut -d= -f2)
+    if [[ -n "$PROJ_PATH" && -d "$PROJ_PATH" ]]; then
+        cd "$PROJ_PATH" || exit 1
+        log_success "Switched to: $PROJ_PATH"
+        open_editor .
+    else
+        log_error "Project '$NAME' not found or path missing."
+    fi
+}
+
+function list_projects() {
+    divider
+    echo -e "${BOLD}📁 Saved Projects${NC}"
+    divider
+    if [ -f "$PROJECTS_FILE" ] && [ -s "$PROJECTS_FILE" ]; then
+        while IFS='=' read -r name path; do
+            if [ -d "$path" ]; then
+                echo -e "  ${GREEN}● $name${NC} → $path"
+            else
+                echo -e "  ${RED}✗ $name${NC} → $path ${YELLOW}(missing)${NC}"
+            fi
+        done < "$PROJECTS_FILE"
+    else
+        log_warn "No projects saved. Use: dev save-project <name>"
+    fi
+    divider
+}
+
+function remove_project() {
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project alias to remove: " NAME
+    grep -v "^$NAME=" "$PROJECTS_FILE" > "$TMP_DIR/_proj_tmp" \
+        && mv "$TMP_DIR/_proj_tmp" "$PROJECTS_FILE"
+    log_success "Project '$NAME' removed."
+}

@@ -1,0 +1,125 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# git.sh — Git Operations
+# ──────────────────────────────────────
+
+function quick_push() {
+    require_git_repo
+    local MSG=$ARG1
+    [[ -z "$MSG" ]] && read -p "Commit message: " MSG
+    [[ -z "$MSG" ]] && log_error "Commit message is required." && exit 1
+
+    log_step "Staging all changes..."
+    git add .
+    git commit -m "$MSG" || { log_warn "Nothing to commit."; exit 0; }
+
+    if git push; then
+        log_success "Pushed: \"$MSG\""
+        log_to_file "Pushed: $MSG"
+    else
+        local PUSH_EXIT=$?
+        log_error "فشل الـ push."
+        echo ""
+        echo -e "${YELLOW}💡 أسباب شائعة وحلولها:${NC}"
+        echo -e "  • SSH غير مضبوط   → ${CYAN}dev ssh-check${NC}"
+        echo -e "  • الـ remote غير صحيح → ${CYAN}git remote -v${NC}"
+        echo -e "  • gh غير مسجّل    → ${CYAN}gh auth status${NC}"
+        echo -e "  • هناك commits جديدة على الـ remote → ${CYAN}dev sync${NC} أولاً"
+        echo ""
+        exit $PUSH_EXIT
+    fi
+}
+
+function git_status() {
+    require_git_repo
+    divider
+    echo -e "${BOLD}📋 Git Status${NC}"
+    divider
+    local BRANCH REMOTE AHEAD
+    BRANCH=$(git branch --show-current)
+    REMOTE=$(git remote get-url origin 2>/dev/null || echo "No remote")
+    AHEAD=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo "?")
+    echo -e "  Branch : ${GREEN}$BRANCH${NC}"
+    echo -e "  Remote : ${CYAN}$REMOTE${NC}"
+    echo -e "  Ahead  : ${YELLOW}$AHEAD commits${NC}"
+    echo ""
+    git status -s
+    echo ""
+    echo -e "${BOLD}Last 7 commits:${NC}"
+    git log --oneline -7 --decorate --color
+    divider
+}
+
+function new_branch() {
+    require_git_repo
+    local BRANCH=$ARG1
+    [[ -z "$BRANCH" ]] && read -p "Branch name: " BRANCH
+    [[ -z "$BRANCH" ]] && log_error "Branch name is required." && exit 1
+
+    git checkout -b "$BRANCH" \
+        && log_success "Created and switched to: $BRANCH" \
+        || log_error "Failed to create branch."
+}
+
+function switch_branch() {
+    require_git_repo
+    echo -e "${BOLD}Available branches:${NC}"
+    git branch -a --color
+    echo ""
+    read -p "Branch to switch to: " BRANCH
+    git checkout "$BRANCH" \
+        && log_success "Switched to: $BRANCH" \
+        || log_error "Failed to switch branch."
+}
+
+function merge_and_clean() {
+    require_git_repo
+    local CURRENT
+    CURRENT=$(git branch --show-current)
+    read -p "Merge '$CURRENT' into (default: main): " TARGET
+    TARGET="${TARGET:-main}"
+
+    git checkout "$TARGET" \
+        && git merge "$CURRENT" \
+        && git branch -d "$CURRENT" \
+        && log_success "Merged '$CURRENT' → '$TARGET' and deleted branch." \
+        || log_error "Merge failed."
+}
+
+function undo_commit() {
+    require_git_repo
+    git reset --soft HEAD~1 \
+        && log_success "Last commit undone. Changes kept in staging." \
+        || log_error "Failed to undo commit."
+}
+
+function sync_repo() {
+    require_git_repo
+    local BRANCH
+    BRANCH=$(git branch --show-current)
+    log_step "Syncing '$BRANCH' with remote..."
+    git pull --rebase origin "$BRANCH" \
+        && log_success "Synced successfully!" \
+        || {
+            log_error "فشل الـ sync."
+            echo -e "${YELLOW}💡 حل التعارضات:${NC}"
+            echo -e "  1. عدّل الملفات المتعارضة"
+            echo -e "  2. ${CYAN}git add .${NC}"
+            echo -e "  3. ${CYAN}git rebase --continue${NC}"
+            echo -e "  للإلغاء: ${CYAN}git rebase --abort${NC}"
+        }
+}
+
+function clean_branches() {
+    require_git_repo
+    log_step "Deleting merged branches..."
+    git branch --merged main | grep -v "^\*\|main\|master" \
+        | xargs git branch -d 2>/dev/null \
+        && log_success "Merged branches cleaned." \
+        || log_warn "No merged branches to clean."
+}
+
+function git_log() {
+    require_git_repo
+    git log --graph --oneline --decorate --all --color | head -30
+}

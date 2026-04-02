@@ -1,0 +1,57 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# repo.sh — GitHub Repository Creation
+# ──────────────────────────────────────
+
+function write_gitignore() {
+    case $1 in
+        1) printf "build/\n.dart_tool/\n.packages\n.pub-cache/\n*.g.dart\n.flutter-plugins\n.flutter-plugins-dependencies\n" > .gitignore ;;
+        2) printf "node_modules/\ndist/\n.env\n.env.local\n.env.production\nnpm-debug.log*\n" > .gitignore ;;
+        3) printf "node_modules/\ndist/\n.env\n.env.local\n.nuxt/\n.output/\n*.log\n" > .gitignore ;;
+        4) printf "bin/\nobj/\n.vs/\n*.user\n*.suo\n[Pp]ublish/\n*.nupkg\n.env\n" > .gitignore ;;
+        5) printf "node_modules/\ndist/\n.env\n.DS_Store\nThumbs.db\n*.log\n" > .gitignore ;;
+    esac
+    log_success ".gitignore created"
+}
+
+function create_repo() {
+    require_command gh
+    check_ssh
+    [ ! -d ".git" ] && git init && log_success "Git initialized"
+
+    read -p "Repository name : " REPO_NAME
+    [[ -z "$REPO_NAME" ]] && log_error "Name is required." && exit 1
+    read -p "Private? (y/n)  : " PRIVATE
+    local VISIBILITY="--public"
+    [[ "$PRIVATE" == "y" ]] && VISIBILITY="--private"
+
+    echo ""
+    echo -e "${BOLD}Project type:${NC}"
+    echo "  1) Flutter   2) Node.js   3) Vue"
+    echo "  4) .NET      5) Web       6) Empty"
+    read -p "Choice [1-6]: " TYPE
+    [[ "$TYPE" != "6" ]] && write_gitignore "$TYPE"
+
+    if [ ! -f README.md ]; then
+        printf "# %s\n\n> Created with Developer CLI Toolkit 🚀\n\n## Getting Started\n\n_Add project description here._\n" \
+            "$REPO_NAME" > README.md
+        log_success "README.md created"
+    fi
+
+    read -p "Initial commit message (default: 'Initial commit'): " MSG
+    MSG="${MSG:-Initial commit}"
+    git add . && git commit -m "$MSG"
+
+    log_step "Creating GitHub repository..."
+    if gh repo create "$REPO_NAME" $VISIBILITY --source=. --remote=origin; then
+        git branch -M main && git push -u origin main
+        log_success "Repository created and pushed!"
+        local GH_USER
+        GH_USER=$(gh api user -q .login 2>/dev/null)
+        [[ -n "$GH_USER" ]] && echo -e "${CYAN}🔗 https://github.com/$GH_USER/$REPO_NAME${NC}"
+        log_to_file "Repo created: $REPO_NAME"
+    else
+        log_error "Failed to create repository. Check 'gh auth status'."
+        exit 1
+    fi
+}

@@ -1,0 +1,252 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# utils.sh — Colors, Logging, Spinner & Helpers
+# ──────────────────────────────────────
+
+# --- Colors ---
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+YELLOW="\033[1;33m"
+CYAN="\033[0;36m"
+BLUE="\033[0;34m"
+MAGENTA="\033[0;35m"
+BOLD="\033[1m"
+NC="\033[0m"
+
+# --- Logging ---
+function log_info()    { echo -e "${CYAN}ℹ️  $1${NC}"; }
+function log_success() { echo -e "${GREEN}✅ $1${NC}"; }
+function log_warn()    { echo -e "${YELLOW}⚠️  $1${NC}"; }
+function log_error()   { echo -e "${RED}❌ $1${NC}"; }
+function log_step()    { echo -e "${BLUE}▶  $1${NC}"; }
+function divider()     { echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
+
+# ──────────────────────────────────────
+# LOG ROTATION — الاحتفاظ بآخر 1000 سطر فقط
+# ──────────────────────────────────────
+function log_to_file() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$OS_TYPE] $1" >> "$LOG_FILE"
+
+    local LINE_COUNT
+    LINE_COUNT=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
+    if (( LINE_COUNT > 1000 )); then
+        local TMP_LOG="$TMP_DIR/_devtoolkit_log_tmp"
+        tail -800 "$LOG_FILE" > "$TMP_LOG" && mv "$TMP_LOG" "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [system] Log rotated — kept last 800 lines" >> "$LOG_FILE"
+    fi
+}
+
+# --- Guards ---
+function require_command() {
+    local CMD=$1
+    if ! command -v "$CMD" &>/dev/null; then
+        log_error "'$CMD' غير مثبت."
+        case "$CMD" in
+            git)      log_info "تثبيت Git: https://git-scm.com/downloads" ;;
+            gh)       log_info "تثبيت GitHub CLI: https://cli.github.com" ;;
+            flutter)  log_info "تثبيت Flutter: https://flutter.dev/docs/get-started/install" ;;
+            docker)   log_info "تثبيت Docker: https://docs.docker.com/get-docker" ;;
+            npm|node) log_info "تثبيت Node.js: https://nodejs.org" ;;
+            dotnet)   log_info "تثبيت .NET: https://dotnet.microsoft.com/download" ;;
+            *)        log_info "يرجى تثبيت '$CMD' أولاً." ;;
+        esac
+        exit 1
+    fi
+}
+
+function require_git_repo() {
+    if [ ! -d ".git" ]; then
+        log_error "هذا المجلد ليس مستودع Git."
+        log_info "لإنشاء مستودع جديد: ${CYAN}dev create-repo${NC}"
+        log_info "أو لتهيئة git يدوياً:  ${CYAN}git init${NC}"
+        exit 1
+    fi
+}
+
+# --- Input ---
+function confirm() {
+    read -p "$1 (y/n): " _CONFIRM
+    [[ "$_CONFIRM" == "y" ]]
+}
+
+# --- Editor & Browser ---
+function open_editor() {
+    local DIR=${1:-.}
+    load_config
+    case "$OS_TYPE" in
+        windows)
+            if command -v "$EDITOR_PREF" &>/dev/null; then
+                "$EDITOR_PREF" "$DIR" &
+            elif command -v code &>/dev/null; then
+                code "$DIR" &
+            fi
+            ;;
+        *)
+            command -v "$EDITOR_PREF" &>/dev/null && "$EDITOR_PREF" "$DIR" &
+            ;;
+    esac
+}
+
+function open_browser() {
+    local URL=$1
+    case "$OS_TYPE" in
+        macos)   open "$URL" ;;
+        linux)   xdg-open "$URL" 2>/dev/null ;;
+        windows) cmd.exe /c start "$URL" 2>/dev/null ;;
+    esac
+}
+
+# ──────────────────────────────────────
+# SPINNER
+# ──────────────────────────────────────
+
+_SPINNER_PID=""
+
+function spinner_start() {
+    local LABEL="${1:-جاري التنفيذ...}"
+    [[ ! -t 1 ]] && return   # لا spinner خارج الـ terminal
+
+    local FRAMES=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+    (
+        local i=0
+        while true; do
+            printf "\r${CYAN}%s${NC} %s  " "${FRAMES[$i]}" "$LABEL"
+            i=$(( (i + 1) % ${#FRAMES[@]} ))
+            sleep 0.1
+        done
+    ) &
+    _SPINNER_PID=$!
+    disown "$_SPINNER_PID" 2>/dev/null
+}
+
+function spinner_stop() {
+    if [[ -n "$_SPINNER_PID" ]]; then
+        kill "$_SPINNER_PID" 2>/dev/null
+        wait "$_SPINNER_PID" 2>/dev/null
+        _SPINNER_PID=""
+        printf "\r\033[K"
+    fi
+}
+
+# ──────────────────────────────────────
+# NOTIFICATIONS
+# ──────────────────────────────────────
+
+function notify() {
+    local TITLE=$1 MESSAGE=$2 SUCCESS=$3
+
+    case "$OS_TYPE" in
+        macos)
+            local SOUND="Glass"
+            [[ "$SUCCESS" == "false" ]] && SOUND="Basso"
+            osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\" sound name \"$SOUND\"" 2>/dev/null
+            ;;
+        windows)
+            powershell.exe -Command "
+                Add-Type -AssemblyName System.Windows.Forms
+                \$notify = New-Object System.Windows.Forms.NotifyIcon
+                \$notify.Icon = [System.Drawing.SystemIcons]::Information
+                \$notify.Visible = \$true
+                \$notify.ShowBalloonTip(5000, '$TITLE', '$MESSAGE', [System.Windows.Forms.ToolTipIcon]::Info)
+            " 2>/dev/null
+            ;;
+        linux)
+            command -v notify-send &>/dev/null && notify-send "$TITLE" "$MESSAGE" 2>/dev/null
+            ;;
+    esac
+
+    if [[ "$SUCCESS" == "false" ]]; then
+        log_error "$TITLE — $MESSAGE"
+    else
+        log_success "$TITLE — $MESSAGE"
+    fi
+}
+
+# ──────────────────────────────────────
+# run_with_notify + spinner
+# الاستخدام: run_with_notify "Title" command arg1 arg2 ...
+# ──────────────────────────────────────
+function run_with_notify() {
+    local TITLE=$1
+    shift
+
+    local START
+    START=$(date +%s)
+
+    spinner_start "$TITLE"
+    "$@"
+    local EXIT_CODE=$?
+    spinner_stop
+
+    local END DURATION TIME_STR
+    END=$(date +%s)
+    DURATION=$((END - START))
+
+    if   (( DURATION >= 3600 )); then
+        TIME_STR="$((DURATION/3600))h $((DURATION%3600/60))m"
+    elif (( DURATION >= 60 )); then
+        TIME_STR="$((DURATION/60))m $((DURATION%60))s"
+    else
+        TIME_STR="${DURATION}s"
+    fi
+
+    if [ $EXIT_CODE -eq 0 ]; then
+        notify "✅ $TITLE" "اكتمل في $TIME_STR" "true"
+        log_to_file "$TITLE completed in $TIME_STR"
+    else
+        notify "❌ $TITLE" "فشل بعد $TIME_STR" "false"
+        log_to_file "$TITLE FAILED after $TIME_STR"
+        _suggest_fix "$TITLE" "$EXIT_CODE"
+    fi
+
+    return $EXIT_CODE
+}
+
+# ──────────────────────────────────────
+# رسائل خطأ ذكية — تقترح الحل تلقائياً
+# ──────────────────────────────────────
+function _suggest_fix() {
+    local CONTEXT=$1
+
+    echo ""
+    echo -e "${YELLOW}💡 اقتراحات لحل المشكلة:${NC}"
+
+    case "$CONTEXT" in
+        *Flutter*Build*APK*|*Flutter*Build*Android*)
+            echo -e "  • تأكد من إعداد Android SDK وأن ANDROID_HOME مضبوط"
+            echo -e "  • جرّب: ${CYAN}dev clean${NC} ثم أعد المحاولة"
+            echo -e "  • جرّب: ${CYAN}flutter pub get${NC}"
+            ;;
+        *Flutter*Build*iOS*)
+            echo -e "  • تأكد من Xcode ورخصة المطور"
+            echo -e "  • جرّب: ${CYAN}cd ios && pod install --repo-update${NC}"
+            ;;
+        *Flutter*Build*Web*)
+            echo -e "  • جرّب: ${CYAN}flutter channel stable && flutter upgrade${NC}"
+            ;;
+        *Flutter*Tests*)
+            echo -e "  • شغّل: ${CYAN}flutter test --verbose${NC} لمزيد من التفاصيل"
+            ;;
+        *Docker*Build*)
+            echo -e "  • تأكد أن Docker Desktop يعمل: ${CYAN}dev doctor${NC}"
+            echo -e "  • تحقق من صحة الـ Dockerfile"
+            echo -e "  • جرّب: ${CYAN}docker system prune -f${NC} لتحرير المساحة"
+            ;;
+        *Node*Build*|*npm*)
+            echo -e "  • جرّب: ${CYAN}dev npm-install${NC} أولاً"
+            echo -e "  • تحقق من الـ package.json وأن script 'build' موجود"
+            ;;
+        *.NET*Build*)
+            echo -e "  • جرّب: ${CYAN}dotnet restore${NC} أولاً"
+            echo -e "  • تحقق من إصدار .NET: ${CYAN}dotnet --version${NC}"
+            ;;
+        *.NET*Tests*)
+            echo -e "  • شغّل: ${CYAN}dotnet test --verbosity detailed${NC}"
+            ;;
+        *)
+            echo -e "  • شغّل: ${CYAN}dev logs${NC} لمراجعة آخر الأحداث"
+            echo -e "  • شغّل: ${CYAN}dev doctor${NC} للتحقق من البيئة"
+            ;;
+    esac
+    echo ""
+}

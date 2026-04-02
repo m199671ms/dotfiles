@@ -1,0 +1,96 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# frameworks.sh — Node.js / Vue / .NET / Web
+# ──────────────────────────────────────
+
+# ── Node.js / Vue ──────────────────────
+
+function node_install() {
+    require_command npm
+    log_step "Installing dependencies..."
+    npm install && log_success "Dependencies installed!" || log_error "npm install failed."
+}
+
+function node_run() {
+    require_command npm
+    local SCRIPT=$ARG1
+    [[ -z "$SCRIPT" ]] && SCRIPT="dev"
+    log_step "Running npm $SCRIPT..."
+    npm run "$SCRIPT"
+}
+
+function node_build() {
+    require_command npm
+    log_step "Building project..."
+    # FIX: استبدال eval بتمرير الأمر مباشرة
+    run_with_notify "Node Build" npm run build
+}
+
+function vue_new() {
+    require_command npm
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project name: " NAME
+    [[ -z "$NAME" ]] && log_error "Project name is required." && exit 1
+    log_step "Creating Vue project: $NAME"
+    npm create vue@latest "$NAME" && log_success "Vue project '$NAME' created!"
+}
+
+# ── .NET ───────────────────────────────
+
+function dotnet_new() {
+    require_command dotnet
+    echo -e "${BOLD}Project template:${NC}"
+    echo "  1) console  2) webapi  3) mvc  4) blazorwasm  5) classlib"
+    read -p "Choice [1-5]: " CHOICE
+    local TEMPLATE
+    case $CHOICE in
+        1) TEMPLATE="console"    ;;
+        2) TEMPLATE="webapi"     ;;
+        3) TEMPLATE="mvc"        ;;
+        4) TEMPLATE="blazorwasm" ;;
+        5) TEMPLATE="classlib"   ;;
+        *) log_error "Invalid choice." && exit 1 ;;
+    esac
+    local NAME=$ARG1
+    [[ -z "$NAME" ]] && read -p "Project name: " NAME
+    log_step "Creating .NET $TEMPLATE project: $NAME"
+    dotnet new "$TEMPLATE" -n "$NAME" && log_success ".NET project '$NAME' created!"
+}
+
+function dotnet_run() {
+    require_command dotnet
+    log_step "Running .NET project..."
+    dotnet run
+}
+
+function dotnet_build() {
+    require_command dotnet
+    log_step "Building .NET project..."
+    # FIX: استبدال eval بتمرير الأمر مباشرة
+    run_with_notify ".NET Build" dotnet build
+}
+
+function dotnet_test() {
+    require_command dotnet
+    log_step "Running .NET tests..."
+    # FIX: استبدال eval بتمرير الأمر مباشرة
+    run_with_notify ".NET Tests" dotnet test
+}
+
+# ── Web Serve ──────────────────────────
+
+function web_serve() {
+    local PORT=$ARG1
+    PORT="${PORT:-3000}"
+    if command -v npx &>/dev/null; then
+        log_step "Starting local server on http://localhost:$PORT"
+        open_browser "http://localhost:$PORT"
+        npx serve -l "$PORT" .
+    elif command -v python3 &>/dev/null; then
+        log_step "Starting Python server on http://localhost:$PORT"
+        open_browser "http://localhost:$PORT"
+        python3 -m http.server "$PORT"
+    else
+        log_error "No server available. Install Node.js or Python3."
+    fi
+}

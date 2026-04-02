@@ -1,0 +1,133 @@
+#!/bin/bash
+# ──────────────────────────────────────
+# update.sh — Self Update & Rollback
+# ──────────────────────────────────────
+
+function self_update() {
+    require_command gh
+
+    eval "$(ssh-agent -s)" > /dev/null
+    ssh-add "$HOME_DIR/.ssh/github_personal" > /dev/null 2>&1
+
+    divider
+    echo -e "${BOLD}🔄 Checking for updates...${NC}"
+    divider
+
+    # 1. رفع التعديلات المحلية أولاً
+    local SCRIPT_DIR
+    SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+    if [ -d "$SCRIPT_DIR/.git" ]; then
+        cd "$SCRIPT_DIR" || exit 1
+
+        if ! git diff --quiet dev 2>/dev/null || \
+           git status --short dev 2>/dev/null | grep -q "^[AM]"; then
+
+            log_step "Local changes detected. Pushing to GitHub..."
+            read -p "Commit message (default: 'update script'): " PUSH_MSG
+            PUSH_MSG="${PUSH_MSG:-update script}"
+
+            git add dev
+            git commit -m "$PUSH_MSG" && git push \
+                && log_success "Local changes pushed!" \
+                || { log_error "Push failed. Check your remote/permissions."; exit 1; }
+        else
+            log_info "No local changes to push."
+        fi
+
+        cd - > /dev/null
+    fi
+
+    # 2. التحقق من تحديثات GitHub
+    local TMP_FILE="$TMP_DIR/_dev_update_tmp"
+
+    if ! gh api repos/m199671ms/dotfiles/contents/dev \
+        --jq '.content' | base64 --decode > "$TMP_FILE" 2>/dev/null; then
+        log_error "Could not download update. Check 'gh auth status'."
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
+
+    if ! head -1 "$TMP_FILE" | grep -q "bash"; then
+        log_error "Downloaded file doesn't look like a valid script."
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
+
+    local REMOTE_VERSION
+    REMOTE_VERSION=$(grep 'SCRIPT_VERSION=' "$TMP_FILE" | head -1 | cut -d'"' -f2)
+
+    if [[ -z "$REMOTE_VERSION" ]]; then
+        log_warn "Could not determine remote version."
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
+
+    echo -e "  Platform        : ${CYAN}$OS_TYPE${NC}"
+    echo -e "  Current version : ${YELLOW}$SCRIPT_VERSION${NC}"
+    echo -e "  Latest version  : ${GREEN}$REMOTE_VERSION${NC}"
+    echo ""
+
+    if [[ "$SCRIPT_VERSION" == "$REMOTE_VERSION" ]]; then
+        log_success "Already up to date!"
+        rm -f "$TMP_FILE"
+        return 0
+    fi
+
+    # 3. تطبيق التحديث
+    read -p "Update to v$REMOTE_VERSION? (y/n): " CONFIRM
+    if [[ "$CONFIRM" != "y" ]]; then
+        log_warn "Update cancelled."
+        rm -f "$TMP_FILE"
+        return 0
+    fi
+
+    local BACKUP_PATH="${SCRIPT_PATH}.backup_v${SCRIPT_VERSION}"
+    cp "$SCRIPT_PATH" "$BACKUP_PATH"
+    log_info "Backup saved: $BACKUP_PATH"
+
+    mv "$TMP_FILE" "$SCRIPT_PATH"
+    chmod +x "$SCRIPT_PATH"
+
+    log_success "Updated to v$REMOTE_VERSION successfully!"
+    log_to_file "Script updated: $SCRIPT_VERSION → $REMOTE_VERSION"
+    echo -e "${CYAN}ℹ️  Changes will apply on next run.${NC}"
+}
+
+function self_rollback() {
+    divider
+    echo -e "${BOLD}⏪ Rollback${NC}"
+    divider
+
+    local BACKUPS=()
+    while IFS= read -r -d '' f; do
+        BACKUPS+=("$f")
+    done < <(find "$(dirname "$SCRIPT_PATH")" -maxdepth 1 \
+             -name "$(basename "$SCRIPT_PATH").backup_v*" -print0 2>/dev/null \
+             | sort -rz)
+
+    if [[ ${#BACKUPS[@]} -eq 0 ]]; then
+        log_error "No backups found."
+        return 1
+    fi
+
+    echo -e "${BOLD}Available backups:${NC}"
+    for i in "${!BACKUPS[@]}"; do
+        local VER
+        VER=$(echo "${BACKUPS[$i]}" | grep -o 'v[0-9.]*$')
+        echo "  $((i+1))) $VER — ${BACKUPS[$i]}"
+    done
+    echo ""
+
+    read -p "Choose backup [1-${#BACKUPS[@]}]: " CHOICE
+    local INDEX=$((CHOICE - 1))
+
+    if [[ -z "${BACKUPS[$INDEX]}" ]]; then
+        log_error "Invalid choice."
+        return 1
+    fi
+
+    cp "${BACKUPS[$INDEX]}" "$SCRIPT_PATH"
+    chmod +x "$SCRIPT_PATH"
+    log_success "Rolled back to $(echo "${BACKUPS[$INDEX]}" | grep -o 'v[0-9.]*$')!"
+}
