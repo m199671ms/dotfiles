@@ -1,726 +1,331 @@
+<div align="center">
+
+<img src="https://img.shields.io/badge/version-1.5.0-6C63FF?style=for-the-badge" />
+<img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-00B4A6?style=for-the-badge" />
+<img src="https://img.shields.io/badge/shell-bash-1E1E2E?style=for-the-badge&logo=gnubash&logoColor=white" />
+<img src="https://img.shields.io/badge/license-MIT-F4A261?style=for-the-badge" />
+
 # 🚀 Developer CLI Toolkit
 
-> أداة سطر أوامر شاملة تسرّع عملك اليومي في التطوير — تدعم **macOS** و**Windows** و**Linux**
+**أداة سطر أوامر شاملة تجمع كل ما يحتاجه المطور في مكان واحد**
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
-![Shell](https://img.shields.io/badge/shell-bash-green)
-![License](https://img.shields.io/badge/license-MIT-orange)
+*A comprehensive CLI toolkit that unifies your entire development workflow*
 
----
+[العربية](#-الدليل-العربي) · [English](#-english-guide) · [الأوامر](#-جميع-الأوامر--all-commands)
 
-## 📋 المحتويات
-
-- [المتطلبات](#-المتطلبات)
-- [التثبيت](#-التثبيت)
-- [الأوامر المتاحة](#-الأوامر-المتاحة)
-  - [Repository](#-repository)
-  - [Git Shortcuts](#-git-shortcuts)
-  - [Project Manager](#-project-manager)
-  - [Flutter](#-flutter)
-  - [Docker](#-docker)
-  - [Node.js / Vue](#-nodejs--vue)
-  - [.NET](#-net)
-  - [Web](#-web)
-  - [Aliases](#-aliases)
-  - [Doctor](#-doctor)
-  - [أوامر أخرى](#-أوامر-أخرى)
-- [نظام الإشعارات](#-نظام-الإشعارات)
-- [التحديث التلقائي](#-التحديث-التلقائي)
-- [دعم أنظمة التشغيل](#-دعم-أنظمة-التشغيل)
+</div>
 
 ---
 
-## 📦 المتطلبات
+## 📖 الدليل العربي
 
-| الأداة | الاستخدام | مطلوب |
-|--------|-----------|--------|
-| `git` | إدارة الكود | ✅ |
-| `gh` | GitHub CLI | ✅ |
-| `flutter` | مشاريع Flutter | اختياري |
-| `docker` | الحاويات | اختياري |
-| `node` / `npm` | مشاريع Node.js / Vue | اختياري |
-| `dotnet` | مشاريع .NET | اختياري |
+### ما هو هذا السكريبت؟
 
----
+**Developer CLI Toolkit** هو سكريبت Bash متكامل يختصر عشرات الأوامر اليومية في واجهة موحدة وبسيطة. بدل أن تتذكر أوامر git المعقدة، أو تفتح Docker Desktop، أو تبحث عن أوامر Flutter — كل شيء يصبح `dev <أمر>`.
 
-## ⚙️ التثبيت
+### ✨ المميزات الرئيسية
 
-### macOS / Linux
+- **🌍 متعدد الأنظمة** — يعمل على macOS وLinux وWindows (WSL) تلقائياً
+- **⚡ Git مبسّط** — push وsync وbranches بأوامر قصيرة
+- **📱 Flutter كامل** — إنشاء وتشغيل وبناء مع إصلاح تلقائي لمشاكل CocoaPods وGradle
+- **🐳 Docker** — إدارة كاملة للـ containers وcompose
+- **📂 مدير مشاريع** — احفظ مشاريعك وانتقل بينها فوراً
+- **🔔 إشعارات** — إشعار نظام عند اكتمال أو فشل أي عملية طويلة
+- **🔄 تحديث ذاتي** — يحدّث نفسه من GitHub مع دعم الـ rollback
+- **⚡ Aliases** — اصنع اختصاراتك الخاصة
+- **🏥 Doctor** — يفحص بيئتك ويصلح المشاكل تلقائياً
+- **💡 رسائل خطأ ذكية** — عند الفشل يقترح الحل مباشرة
+
+### 📦 التثبيت
 
 ```bash
-# 1. تحميل السكريبت
-curl -o ~/scripts/dev https://raw.githubusercontent.com/m199671ms/dotfiles/main/dev
+# 1. استنساخ المستودع
+git clone git@github.com:m199671ms/dotfiles.git ~/scripts
 
-# 2. إعطاء صلاحية التشغيل
-chmod +x ~/scripts/dev
-
-# 3. إضافة المجلد للـ PATH
+# 2. إضافة المجلد لـ PATH
 echo 'export PATH="$HOME/scripts:$PATH"' >> ~/.zshrc
 source ~/.zshrc
-```
 
-### Windows (Git Bash أو WSL)
-
-```bash
-# 1. إنشاء مجلد السكريبتات
-mkdir -p ~/scripts
-
-# 2. تحميل السكريبت
-curl -o ~/scripts/dev https://raw.githubusercontent.com/m199671ms/dotfiles/main/dev
-
-# 3. إعطاء صلاحية التشغيل
+# 3. تفعيل الصلاحيات
 chmod +x ~/scripts/dev
 
-# 4. إضافة المجلد للـ PATH
-echo 'export PATH="$HOME/scripts:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+# 4. الإعداد الأول (سيطلب منك البيانات تلقائياً)
+dev info
 ```
 
-### التحقق من التثبيت
+### 🗂️ هيكل الملفات
+
+```
+scripts/
+├── dev              ← الملف الرئيسي (الموزّع)
+└── lib/
+    ├── utils        ← الألوان، اللوغ، الـ Spinner، الإشعارات
+    ├── config       ← الإعدادات و SSH
+    ├── git          ← عمليات Git
+    ├── flutter      ← Flutter كاملاً
+    ├── docker       ← Docker وCompose
+    ├── frameworks   ← Node.js · Vue · .NET · Web
+    ├── projects     ← مدير المشاريع
+    ├── repo         ← إنشاء المستودعات
+    ├── doctor       ← فحص وإصلاح البيئة
+    ├── aliases      ← الاختصارات المخصصة
+    ├── update       ← التحديث والـ Rollback
+    └── help         ← المساعدة وعرض اللوغ
+```
+
+### ⚙️ المتطلبات
+
+| الأداة | الاستخدام | مطلوب؟ |
+|--------|-----------|---------|
+| `git` | عمليات Git الأساسية | ✅ ضروري |
+| `gh` | إنشاء المستودعات والتحديث | ✅ ضروري |
+| `flutter` | أوامر Flutter | اختياري |
+| `docker` | أوامر Docker | اختياري |
+| `node / npm` | أوامر Node.js | اختياري |
+| `dotnet` | أوامر .NET | اختياري |
+
+---
+
+## 🌐 English Guide
+
+### What is this?
+
+**Developer CLI Toolkit** is a comprehensive Bash script that consolidates your entire development workflow into one simple interface. Instead of memorizing complex git commands, opening Docker Desktop, or searching for Flutter commands — everything becomes `dev <command>`.
+
+### ✨ Key Features
+
+- **🌍 Cross-platform** — Runs natively on macOS, Linux, and Windows (WSL)
+- **⚡ Simplified Git** — push, sync, and branch management with short commands
+- **📱 Full Flutter** — create, run, build with auto-fix for CocoaPods & Gradle issues
+- **🐳 Docker** — complete container and compose management
+- **📂 Project Manager** — save projects and jump between them instantly
+- **🔔 Notifications** — system notification on completion or failure of long tasks
+- **🔄 Self-Update** — updates itself from GitHub with rollback support
+- **⚡ Aliases** — create your own custom shortcuts
+- **🏥 Doctor** — checks your environment and auto-fixes issues
+- **💡 Smart Errors** — on failure, suggests the fix immediately
+
+### 📦 Installation
 
 ```bash
+# 1. Clone the repository
+git clone git@github.com:m199671ms/dotfiles.git ~/scripts
+
+# 2. Add to PATH
+echo 'export PATH="$HOME/scripts:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# 3. Make executable
+chmod +x ~/scripts/dev
+
+# 4. First-time setup (will prompt for your details)
 dev info
 ```
 
 ---
 
-## 📚 الأوامر المتاحة
+## 📋 جميع الأوامر / All Commands
+
+### 📦 المستودعات / Repository
+
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev create-repo` | إنشاء مستودع GitHub جديد مع .gitignore و README | Create a new GitHub repo with .gitignore & README |
 
 ---
 
-### 📦 Repository
+### ⚡ Git
 
-#### `dev create-repo`
-إنشاء مستودع GitHub جديد ورفعه تلقائياً.
-
-```bash
-dev create-repo
-```
-
-**الخطوات التلقائية:**
-1. إعداد SSH key
-2. اختيار نوع المشروع (Flutter / Node.js / Vue / .NET / Web)
-3. إنشاء `.gitignore` مناسب
-4. إنشاء `README.md`
-5. إنشاء المستودع على GitHub ورفع الكود
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev push "msg"` | add + commit + push بأمر واحد | Stage, commit and push in one command |
+| `dev sync` | pull --rebase من الـ remote | Pull with rebase from remote |
+| `dev status` | حالة المشروع + آخر 7 commits | Project status + last 7 commits |
+| `dev log` | git log بشكل جميل ومنظم | Pretty git log with graph |
+| `dev new-branch <name>` | إنشاء branch جديد والتبديل إليه | Create and switch to a new branch |
+| `dev switch-branch` | قائمة بالـ branches للتبديل | List branches to switch to |
+| `dev merge-clean` | دمج الـ branch الحالي وحذفه | Merge current branch and delete it |
+| `dev clean-branches` | حذف كل الـ branches المدمجة | Delete all merged branches |
+| `dev undo` | التراجع عن آخر commit (soft reset) | Undo last commit, keep changes staged |
 
 ---
 
-### ⚡ Git Shortcuts
+### 📂 المشاريع / Projects
 
-#### `dev push`
-إضافة جميع التغييرات + commit + push بأمر واحد.
-
-```bash
-dev push "fix login bug"
-# أو بدون رسالة (سيطلب منك الإدخال)
-dev push
-```
-
-#### `dev sync`
-سحب آخر التغييرات من الـ remote مع rebase.
-
-```bash
-dev sync
-```
-
-#### `dev status`
-عرض حالة المشروع مع آخر 7 commits.
-
-```bash
-dev status
-```
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Git Status
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Branch : main
-  Remote : git@github.com:user/repo.git
-  Ahead  : 2 commits
-
-M  lib/main.dart
-?? pubspec.lock
-
-Last 7 commits:
-* abc1234 fix: login button
-* def5678 feat: add dark mode
-```
-
-#### `dev log`
-عرض git log بشكل مرئي مع graph.
-
-```bash
-dev log
-```
-
-#### `dev new-branch`
-إنشاء branch جديد والتبديل إليه.
-
-```bash
-dev new-branch feature/login
-# أو بدون اسم (سيطلب منك الإدخال)
-dev new-branch
-```
-
-#### `dev switch-branch`
-عرض جميع الفروع والتبديل بينها.
-
-```bash
-dev switch-branch
-```
-
-#### `dev merge-clean`
-دمج الـ branch الحالي في main وحذفه.
-
-```bash
-dev merge-clean
-# سيسألك: Merge 'feature/login' into (default: main):
-```
-
-#### `dev clean-branches`
-حذف جميع الفروع المدمجة في main.
-
-```bash
-dev clean-branches
-```
-
-#### `dev undo`
-التراجع عن آخر commit مع الاحتفاظ بالتغييرات في staging.
-
-```bash
-dev undo
-```
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev save-project <name>` | حفظ مسار المشروع الحالي | Save current directory as a project |
+| `dev goto <name>` | الانتقال السريع لمشروع + فتح المحرر | Jump to project and open editor |
+| `dev projects` | عرض قائمة المشاريع المحفوظة | List all saved projects |
+| `dev remove-project <name>` | حذف مشروع من القائمة | Remove a project from the list |
 
 ---
 
-### 📂 Project Manager
+### 📱 Flutter
 
-#### `dev save-project`
-حفظ مسار المشروع الحالي باسم مختصر.
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev flutter-new <name>` | إنشاء مشروع Flutter جديد | Create a new Flutter project |
+| `dev flutter-run [name]` | تشغيل مع قائمة الأجهزة | Run with device selection menu |
+| `dev flutter-build` | بناء (APK/iOS/Web/Desktop) + إشعار | Build for target platform + notification |
+| `dev flutter-test` | تشغيل الاختبارات + إشعار | Run tests + notification |
+| `dev flutter-upgrade` | ترقية Flutter و packages | Upgrade Flutter and packages |
+| `dev clean` | flutter clean | Clean build artifacts |
 
-```bash
-cd ~/projects/my-flutter-app
-dev save-project myapp
-# ✅ Project 'myapp' saved → /Users/user/projects/my-flutter-app
-```
-
-#### `dev goto`
-الانتقال السريع لمشروع محفوظ وفتحه في المحرر.
-
-```bash
-dev goto myapp
-# ✅ Switched to: /Users/user/projects/my-flutter-app
-# يفتح VS Code تلقائياً
-```
-
-#### `dev projects`
-عرض جميع المشاريع المحفوظة.
-
-```bash
-dev projects
-```
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 Saved Projects
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ● myapp    → /Users/user/projects/my-flutter-app
-  ● backend  → /Users/user/projects/api-server
-  ✗ oldapp   → /Users/user/projects/old (missing)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-#### `dev remove-project`
-حذف مشروع من القائمة.
-
-```bash
-dev remove-project myapp
-```
-
----
-
-### ⚡ Flutter
-
-#### `dev flutter-new`
-إنشاء مشروع Flutter جديد.
-
-```bash
-dev flutter-new my_app
-# سيسألك عن: Organization (e.g. com.company)
-```
-
-#### `dev flutter-run`
-تشغيل مشروع Flutter مع اختيار الجهاز.
-
-```bash
-# من داخل المشروع
-dev flutter-run
-
-# أو بتحديد مشروع محفوظ مباشرة
-dev flutter-run myapp
-
-# أو بمسار مباشر
-dev flutter-run ~/projects/my-flutter-app
-```
-
-**خيارات التشغيل حسب النظام:**
-
-| macOS | Windows | Linux |
-|-------|---------|-------|
-| Android | Android | Android |
-| iOS | Windows Desktop | Linux Desktop |
-| macOS Desktop | Web | Web |
-| Web | جهاز محدد | جهاز محدد |
-| جهاز محدد | | |
-
-> **إصلاح تلقائي:** عند اكتشاف مشكلة CocoaPods يقوم السكريبت بإصلاحها تلقائياً بـ 3 مراحل متصاعدة.
-
-#### `dev flutter-build`
-بناء المشروع مع إشعار عند الانتهاء.
-
-```bash
-dev flutter-build
-# الخيارات: APK release / APK debug / iOS / Web / Desktop
-```
-
-#### `dev flutter-test`
-تشغيل الاختبارات مع إشعار عند الانتهاء.
-
-```bash
-dev flutter-test
-```
-
-#### `dev flutter-upgrade`
-ترقية Flutter وجميع الـ packages.
-
-```bash
-dev flutter-upgrade
-```
-
-#### `dev clean`
-تنظيف مشروع Flutter.
-
-```bash
-dev clean
-```
+> **ملاحظة / Note:** `flutter-run` يصلح مشاكل CocoaPods وGradle تلقائياً حتى 2 محاولات
+> Auto-fixes CocoaPods & Gradle issues with up to 2 retry attempts
 
 ---
 
 ### 🐳 Docker
 
-#### `dev docker-build`
-بناء Docker image مع إشعار عند الانتهاء.
-
-```bash
-dev docker-build myapp
-# سيسألك عن: Tag (default: latest)
-```
-
-#### `dev docker-run`
-تشغيل Docker container.
-
-```bash
-dev docker-run myapp
-# سيسألك عن: Port mapping, Container name
-```
-
-#### `dev docker-list`
-عرض جميع الـ images والـ containers الجارية.
-
-```bash
-dev docker-list
-```
-
-#### `dev docker-stop`
-إيقاف جميع الـ containers الجارية.
-
-```bash
-dev docker-stop
-```
-
-#### `dev docker-clean`
-حذف الـ containers المتوقفة والـ images غير المستخدمة.
-
-```bash
-dev docker-clean
-```
-
-#### `dev compose-up` / `dev compose-down`
-تشغيل وإيقاف خدمات docker-compose.
-
-```bash
-dev compose-up    # docker compose up -d
-dev compose-down  # docker compose down
-```
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev docker-build <name>` | بناء Docker image + إشعار | Build Docker image + notification |
+| `dev docker-run <name>` | تشغيل container مع port mapping | Run container with port mapping |
+| `dev docker-list` | عرض كل الـ images والـ containers | List all images and containers |
+| `dev docker-stop` | إيقاف جميع الـ containers | Stop all running containers |
+| `dev docker-clean` | تنظيف Docker (containers + images) | Clean Docker system |
+| `dev compose-up` | docker compose up -d | Start compose services |
+| `dev compose-down` | docker compose down | Stop compose services |
 
 ---
 
 ### 🟢 Node.js / Vue
 
-#### `dev npm-install`
-تثبيت الـ dependencies.
-
-```bash
-dev npm-install
-```
-
-#### `dev npm-run`
-تشغيل npm script.
-
-```bash
-dev npm-run dev
-dev npm-run test
-dev npm-run build
-```
-
-#### `dev npm-build`
-بناء المشروع مع إشعار عند الانتهاء.
-
-```bash
-dev npm-build
-```
-
-#### `dev vue-new`
-إنشاء مشروع Vue جديد.
-
-```bash
-dev vue-new my-vue-app
-```
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev npm-install` | npm install | Install dependencies |
+| `dev npm-run <script>` | npm run \<script\> | Run npm script |
+| `dev npm-build` | npm run build + إشعار | Build project + notification |
+| `dev vue-new <name>` | إنشاء مشروع Vue جديد | Create a new Vue project |
 
 ---
 
 ### 💜 .NET
 
-#### `dev dotnet-new`
-إنشاء مشروع .NET جديد.
-
-```bash
-dev dotnet-new MyProject
-# الخيارات: console / webapi / mvc / blazorwasm / classlib
-```
-
-#### `dev dotnet-run`
-تشغيل المشروع.
-
-```bash
-dev dotnet-run
-```
-
-#### `dev dotnet-build`
-بناء المشروع مع إشعار عند الانتهاء.
-
-```bash
-dev dotnet-build
-```
-
-#### `dev dotnet-test`
-تشغيل الاختبارات مع إشعار عند الانتهاء.
-
-```bash
-dev dotnet-test
-```
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev dotnet-new <name>` | إنشاء مشروع .NET (console/webapi/mvc...) | Create new .NET project |
+| `dev dotnet-run` | تشغيل المشروع | Run the project |
+| `dev dotnet-build` | بناء + إشعار | Build + notification |
+| `dev dotnet-test` | تشغيل الاختبارات + إشعار | Run tests + notification |
 
 ---
 
 ### 🌐 Web
 
-#### `dev web-serve`
-تشغيل local server وفتح المتصفح تلقائياً.
-
-```bash
-dev web-serve        # المنفذ الافتراضي: 3000
-dev web-serve 8080   # منفذ مخصص
-```
-
-> يستخدم `npx serve` إذا كان Node.js مثبتاً، وإلا يستخدم `python3 -m http.server`.
-
----
-
-### ⚡ Aliases
-
-نظام اختصارات شخصية للأوامر الأكثر استخداماً.
-
-#### `dev alias-add`
-إضافة اختصار جديد.
-
-```bash
-dev alias-add r flutter-run
-dev alias-add b flutter-build
-dev alias-add p push
-dev alias-add s status
-```
-
-#### `dev alias-list`
-عرض جميع الاختصارات.
-
-```bash
-dev alias-list
-```
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ Custom Aliases
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  dev r → dev flutter-run
-  dev b → dev flutter-build
-  dev p → dev push
-  dev s → dev status
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-#### `dev alias-remove`
-حذف اختصار.
-
-```bash
-dev alias-remove r
-```
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev web-serve [port]` | تشغيل local server (افتراضي: 3000) | Start local server (default: 3000) |
 
 ---
 
 ### 🏥 Doctor
 
-#### `dev doctor`
-فحص شامل لبيئة التطوير واكتشاف المشاكل وإصلاحها تلقائياً.
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev doctor` | فحص كامل لبيئة التطوير | Full environment health check |
+| `dev doctor --fix` | فحص + إصلاح تلقائي | Check and auto-fix issues |
+
+يفحص / Checks: Git · GitHub CLI · SSH Keys · Flutter · CocoaPods · Android SDK · Docker · Node.js · .NET · مساحة القرص / Disk space
+
+---
+
+### 🔧 أدوات أخرى / Other Tools
+
+| الأمر | الوصف | Description |
+|-------|-------|-------------|
+| `dev ssh-check` | إعداد SSH keys (personal/company) | Setup SSH keys |
+| `dev config` | تعديل الإعدادات | Edit configuration |
+| `dev info` | معلومات البيئة والأدوات المثبتة | Show environment info |
+| `dev logs` | سجل النشاط مع إحصائيات | Activity log with stats |
+| `dev update` | تحديث السكريبت من GitHub | Update script from GitHub |
+| `dev rollback` | الرجوع لإصدار سابق | Rollback to a previous version |
+| `dev help` | عرض قائمة الأوامر | Show all commands |
+
+---
+
+### ⚡ Aliases — الاختصارات المخصصة
 
 ```bash
-dev doctor
+# إضافة اختصار / Add alias
+dev alias-add pb push
+
+# الآن يمكنك استخدام / Now you can use:
+dev pb "fix login bug"
+
+# عرض الاختصارات / List aliases
+dev alias-list
+
+# حذف اختصار / Remove alias
+dev alias-remove pb
 ```
 
-**ما يفحصه:**
+---
 
-| الفحص | الإجراء عند وجود مشكلة |
-|-------|------------------------|
-| Git config (name, email) | يطلب منك الإدخال ويضبطه |
-| SSH keys لـ GitHub | يخبرك بطريقة الإنشاء |
-| Flutter doctor | يشغّل `flutter doctor` ويعرض الملخص |
-| CocoaPods (macOS) | يشغّل `pod repo update` تلقائياً |
-| Android SDK | يتحقق من `ANDROID_HOME` |
-| Docker | يتحقق من تشغيل الـ daemon |
-| GitHub CLI auth | يتحقق من `gh auth status` |
-| Node.js / npm | يتحقق من الإصدار |
-| disk space | يحذّر إذا كانت المساحة أقل من 5GB |
-
-**مثال على الناتج:**
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏥 Dev Doctor — macOS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ Git installed        — git version 2.39.0
-✅ Git name             — Mohammed Saeed
-✅ Git email            — user@gmail.com
-✅ GitHub CLI           — logged in as m199671ms
-✅ SSH key (personal)   — found
-⚠️  SSH key (company)   — not found
-✅ Flutter              — Flutter 3.16.0
-⚠️  CocoaPods           — out of date → fixing...
-✅ CocoaPods            — fixed!
-✅ Docker               — running
-❌ Android SDK          — ANDROID_HOME not set
-✅ Node.js              — v20.10.0
-✅ Disk space           — 45.2 GB free
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️  2 warnings  |  ❌ 1 error
-Run 'dev doctor --fix' to auto-fix all issues
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+## 💡 أمثلة سريعة / Quick Examples
 
 ```bash
-# فحص فقط بدون إصلاح
-dev doctor
+# إنشاء مستودع GitHub وربطه
+dev create-repo
 
-# فحص وإصلاح تلقائي لكل المشاكل
+# رفع التعديلات
+dev push "fix: resolve login issue"
+
+# بناء APK وانتظر الإشعار
+dev flutter-build
+
+# حفظ موقعك الحالي والرجوع إليه لاحقاً
+dev save-project myapp
+dev goto myapp
+
+# فحص وإصلاح البيئة
 dev doctor --fix
 ```
 
 ---
 
-### 🔧 أوامر أخرى
+## 🔔 نظام الإشعارات / Notification System
 
-#### `dev ssh-check`
-إعداد أو التحقق من مفاتيح SSH لـ GitHub.
-
-```bash
-dev ssh-check
-# سيسألك: personal أو company
-```
-
-#### `dev config`
-عرض وتعديل الإعدادات.
-
-```bash
-dev config
-```
-
-**الإعدادات المتاحة:**
-- Personal GitHub email
-- Company GitHub email
-- اسمك الكامل
-- المحرر الافتراضي (code / vim / nano)
-
-#### `dev info`
-عرض معلومات البيئة الكاملة.
-
-```bash
-dev info
-```
+الأوامر الطويلة تُرسل إشعار نظام عند الانتهاء:
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Developer CLI Toolkit v6
-   Version  : 1.3.0
-   Platform : macos
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Tools:
-  ✅ git    — git version 2.39.0
-  ✅ gh     — gh version 2.40.0
-  ✅ flutter — Flutter 3.16.0
-  ✅ docker — Docker version 24.0.0
-  ❌ dotnet — not installed
+✅ Flutter Build APK — اكتمل في 1m 23s
+❌ Docker Build — فشل بعد 45s
 ```
 
-#### `dev logs`
-عرض آخر 30 عملية من سجل النشاط.
+عند الفشل يظهر اقتراح تلقائي للحل حسب نوع الخطأ.
+
+On failure, a smart suggestion is shown based on the error context.
+
+---
+
+## 🗒️ اللوغ / Activity Log
 
 ```bash
 dev logs
-```
-
-#### `dev update`
-تحديث السكريبت — يرفع تعديلاتك المحلية أولاً ثم يتحقق من تحديثات GitHub.
-
-```bash
-dev update
-```
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔄 Checking for updates...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-▶  Local changes detected. Pushing to GitHub...
-✅ Local changes pushed!
-  Current version : 1.3.0
-  Latest version  : 1.3.0
-✅ Already up to date!
-```
-
-#### `dev rollback`
-الرجوع لإصدار سابق من السكريبت.
-
-```bash
-dev rollback
-```
-
-#### `dev help`
-عرض قائمة جميع الأوامر.
-
-```bash
-dev help
+# يعرض:
+# - آخر 30 حدث ملوّن (نجاح / فشل)
+# - عدد العمليات الناجحة والفاشلة
+# - حجم الملف وعدد الأسطر
+# اللوغ يُدار تلقائياً (حد أقصى 1000 سطر)
 ```
 
 ---
 
-## 🔔 نظام الإشعارات
-
-السكريبت يرسل إشعار نظام تلقائياً عند انتهاء العمليات الطويلة مع الوقت المستغرق.
-
-| العملية | الإشعار |
-|---------|---------|
-| `flutter-build` | ✅ Flutter Build APK — اكتمل في 2m 34s |
-| `docker-build` | ✅ Docker Build myapp — اكتمل في 45s |
-| `flutter-test` | ❌ Flutter Tests — فشل بعد 12s |
-| `dotnet-build` | ✅ .NET Build — اكتمل في 8s |
-| `npm-build` | ✅ Node Build — اكتمل في 30s |
-
-**دعم الأنظمة:**
-- **macOS** — إشعار نظام مع صوت (Glass للنجاح، Basso للفشل)
-- **Windows** — Windows Toast Notification عبر PowerShell
-- **Linux** — `notify-send` (يتطلب `libnotify`)
-
----
-
-## 🔄 التحديث التلقائي
+## 🤝 المساهمة / Contributing
 
 ```bash
-dev update
+# تعديل السكريبت
+dev update   # سيرفع تعديلاتك المحلية ثم يسحب الأحدث من GitHub
+dev rollback # إذا حدث خطأ، ارجع لإصدار سابق
 ```
-
-**آلية العمل:**
-1. يتحقق من وجود تعديلات محلية غير مرفوعة ويرفعها تلقائياً
-2. يقارن الإصدار الحالي بآخر إصدار على GitHub
-3. يطلب تأكيدك قبل تطبيق أي تحديث
-4. يحفظ نسخة احتياطية تلقائياً قبل التحديث
-
-**الرجوع لإصدار سابق:**
-```bash
-dev rollback
-# يعرض قائمة بجميع النسخ الاحتياطية المتاحة
-```
-
----
-
-## 🖥️ دعم أنظمة التشغيل
-
-| الميزة | macOS | Windows | Linux |
-|--------|:-----:|:-------:|:-----:|
-| Git commands | ✅ | ✅ | ✅ |
-| Flutter (Android) | ✅ | ✅ | ✅ |
-| Flutter (iOS) | ✅ | ❌ | ❌ |
-| Flutter (Desktop) | macOS | Windows | Linux |
-| Flutter (Web) | ✅ | ✅ | ✅ |
-| Docker | ✅ | ✅ | ✅ |
-| إشعارات | osascript | PowerShell | notify-send |
-| فتح المتصفح | `open` | `cmd /c start` | `xdg-open` |
-| SSH Agent | ✅ | OpenSSH Service | ✅ |
-
-> **Windows:** يعمل على Git Bash أو WSL. لتثبيت WSL: `wsl --install` في PowerShell.
-
----
-
-## 📁 ملفات الإعدادات
-
-| الملف | الوظيفة |
-|-------|---------|
-| `~/.devtoolkit_config` | الإعدادات الأساسية (emails, name, editor) |
-| `~/.devtoolkit_projects` | المشاريع المحفوظة |
-| `~/.devtoolkit_aliases` | الاختصارات المخصصة |
-| `~/.devtoolkit.log` | سجل النشاط |
-
----
-
-## 🛠️ أمثلة الاستخدام اليومي
-
-```bash
-# بداية يوم العمل
-dev doctor              # فحص البيئة وإصلاح أي مشاكل
-dev goto myapp          # الانتقال للمشروع
-dev sync                # سحب آخر التغييرات
-dev flutter-run         # تشغيل التطبيق
-
-# أثناء العمل
-dev s                   # alias لـ dev status
-dev p "fix: auth bug"   # alias لـ dev push
-
-# قبل الـ PR
-dev flutter-test        # تشغيل الاختبارات
-dev new-branch feature/payment   # branch جديد
-dev p "feat: add payment"
-dev merge-clean         # دمج وحذف الـ branch
-
-# تحديث السكريبت
-dev update              # يرفع تعديلاتك ويتحقق من تحديثات
-```
-
----
-
-## 📝 الترخيص
-
-MIT License — محمد سعيد
 
 ---
 
 <div align="center">
-  صُنع بـ ❤️ لتسريع التطوير اليومي
+
+صُنع بـ ❤️ · Made with ❤️
+
 </div>
