@@ -1,9 +1,9 @@
 #!/bin/bash
 # =====================================
-# 🚀 Developer CLI Toolkit v1.6
+# 🚀 Developer CLI Toolkit v1.7
 # =====================================
 
-SCRIPT_VERSION="1.6.0"
+SCRIPT_VERSION="1.7.0"
 GITHUB_RAW_URL="https://raw.githubusercontent.com/m199671ms/dotfiles/main/dev"
 
 COMMAND=$1
