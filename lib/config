@@ -20,7 +20,7 @@ function _pick_language() {
     case "$_LANG_CHOICE" in
         1) echo "ar" ;;
         2) echo "en" ;;
-        *) echo "en" ;;   # افتراضي / default
+        *) echo "en" ;;   # default
     esac
 }
 

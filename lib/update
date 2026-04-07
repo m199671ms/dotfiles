@@ -16,79 +16,91 @@ function self_update() {
     local SCRIPT_DIR
     SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
+    # ── 1. فحص التعديلات المحلية غير المرفوعة ─────────────
     if [ -d "$SCRIPT_DIR/.git" ]; then
         cd "$SCRIPT_DIR" || exit 1
 
-        if ! git diff --quiet dev 2>/dev/null || \
-           git status --short dev 2>/dev/null | grep -q "^[AM]"; then
+        # فحص جميع الملفات: dev + lib/*
+        local CHANGED_FILES=()
+        while IFS= read -r -d '' f; do
+            CHANGED_FILES+=("$f")
+        done < <(git diff --name-only HEAD 2>/dev/null | \
+                 grep -E '^(dev|lib/)' | tr '\n' '\0')
 
-            log_step "$(t update_local_changes)"
+        # فحص الملفات الجديدة غير المتتبعة في lib/
+        while IFS= read -r -d '' f; do
+            CHANGED_FILES+=("$f")
+        done < <(git ls-files --others --exclude-standard lib/ dev 2>/dev/null | tr '\n' '\0')
+
+        # فحص الملفات المعلقة في staging
+        while IFS= read -r -d '' f; do
+            CHANGED_FILES+=("$f")
+        done < <(git diff --cached --name-only 2>/dev/null | \
+                 grep -E '^(dev|lib/)' | tr '\n' '\0')
+
+        # إزالة التكرار
+        local UNIQUE_FILES
+        UNIQUE_FILES=$(printf '%s\n' "${CHANGED_FILES[@]}" | sort -u | grep -v '^$')
+
+        if [[ -n "$UNIQUE_FILES" ]]; then
+            echo ""
+            divider
+            log_warn "$(t update_local_changes)"
+            echo ""
+            echo -e "${BOLD}$(t update_changed_files):${NC}"
+            echo "$UNIQUE_FILES" | while read -r file; do
+                echo -e "  ${CYAN}●${NC} $file"
+            done
+            echo ""
+            divider
+
             read -p "$(t update_push_msg_prompt): " PUSH_MSG
             PUSH_MSG="${PUSH_MSG:-update script}"
 
-            git add dev
+            # رفع جميع الملفات المتغيرة
+            git add dev lib/ 2>/dev/null
             git commit -m "$PUSH_MSG" && git push \
                 && log_success "$(t update_pushed)" \
                 || { log_error "$(t update_push_failed)"; exit 1; }
+
+            echo ""
         else
             log_info "$(t update_no_changes)"
+        fi
+
+        # ── 2. التحقق من التزامن مع GitHub ───────────────────
+        echo ""
+        log_step "$(t update_syncing)"
+
+        git fetch origin 2>/dev/null
+
+        local LOCAL_HASH REMOTE_HASH
+        LOCAL_HASH=$(git rev-parse HEAD 2>/dev/null)
+        REMOTE_HASH=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master 2>/dev/null)
+
+        if [[ "$LOCAL_HASH" == "$REMOTE_HASH" ]]; then
+            log_success "$(t update_in_sync)"
+        else
+            local BEHIND
+            BEHIND=$(git rev-list --count HEAD..origin/main 2>/dev/null || \
+                     git rev-list --count HEAD..origin/master 2>/dev/null || echo "?")
+
+            if [[ "$BEHIND" != "0" && "$BEHIND" != "?" ]]; then
+                log_warn "$(t update_behind "$BEHIND")"
+                read -p "$(t update_pull_prompt) $(t confirm_yn): " PULL_CONFIRM
+                if [[ "$PULL_CONFIRM" == "y" ]]; then
+                    git pull --rebase origin main 2>/dev/null || \
+                    git pull --rebase origin master 2>/dev/null
+                    log_success "$(t update_pulled)"
+                fi
+            fi
         fi
 
         cd - > /dev/null
     fi
 
-    local TMP_FILE="$TMP_DIR/_dev_update_tmp"
-
-    if ! gh api repos/m199671ms/dotfiles/contents/dev \
-        --jq '.content' | base64 --decode > "$TMP_FILE" 2>/dev/null; then
-        log_error "$(t update_download_failed)"
-        rm -f "$TMP_FILE"
-        exit 1
-    fi
-
-    if ! head -1 "$TMP_FILE" | grep -q "bash"; then
-        log_error "$(t update_invalid_file)"
-        rm -f "$TMP_FILE"
-        exit 1
-    fi
-
-    local REMOTE_VERSION
-    REMOTE_VERSION=$(grep 'SCRIPT_VERSION=' "$TMP_FILE" | head -1 | cut -d'"' -f2)
-
-    if [[ -z "$REMOTE_VERSION" ]]; then
-        log_warn "$(t update_no_version)"
-        rm -f "$TMP_FILE"
-        exit 1
-    fi
-
-    echo -e "  $(t update_platform)        : ${CYAN}$OS_TYPE${NC}"
-    echo -e "  $(t update_current) : ${YELLOW}$SCRIPT_VERSION${NC}"
-    echo -e "  $(t update_latest)  : ${GREEN}$REMOTE_VERSION${NC}"
-    echo ""
-
-    if [[ "$SCRIPT_VERSION" == "$REMOTE_VERSION" ]]; then
-        log_success "$(t update_uptodate)"
-        rm -f "$TMP_FILE"
-        return 0
-    fi
-
-    read -p "$(t update_confirm "$REMOTE_VERSION") $(t confirm_yn): " CONFIRM
-    if [[ "$CONFIRM" != "y" ]]; then
-        log_warn "$(t update_cancelled)"
-        rm -f "$TMP_FILE"
-        return 0
-    fi
-
-    local BACKUP_PATH="${SCRIPT_PATH}.backup_v${SCRIPT_VERSION}"
-    cp "$SCRIPT_PATH" "$BACKUP_PATH"
-    log_info "$(t update_backup "$BACKUP_PATH")"
-
-    mv "$TMP_FILE" "$SCRIPT_PATH"
-    chmod +x "$SCRIPT_PATH"
-
-    log_success "$(t update_success "$REMOTE_VERSION")"
-    log_to_file "Script updated: $SCRIPT_VERSION → $REMOTE_VERSION"
-    echo -e "${CYAN}ℹ️  $(t update_note)${NC}"
+    log_to_file "Update check completed"
+    divider
 }
 
 function self_rollback() {

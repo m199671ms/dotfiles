@@ -22,7 +22,7 @@ function log_step()    { echo -e "${BLUE}▶  $1${NC}"; }
 function divider()     { echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"; }
 
 # ──────────────────────────────────────
-# LOG ROTATION — الاحتفاظ بآخر 1000 سطر فقط
+# LOG ROTATION — keep last 1000 lines
 # ──────────────────────────────────────
 function log_to_file() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$OS_TYPE] $1" >> "$LOG_FILE"
@@ -32,7 +32,7 @@ function log_to_file() {
     if (( LINE_COUNT > 1000 )); then
         local TMP_LOG="$TMP_DIR/_devtoolkit_log_tmp"
         tail -800 "$LOG_FILE" > "$TMP_LOG" && mv "$TMP_LOG" "$LOG_FILE"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [system] Log rotated — kept last 800 lines" >> "$LOG_FILE"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [system] $(t log_rotated)" >> "$LOG_FILE"
     fi
 }
 
@@ -40,15 +40,15 @@ function log_to_file() {
 function require_command() {
     local CMD=$1
     if ! command -v "$CMD" &>/dev/null; then
-        log_error "'$CMD' غير مثبت."
+        log_error "$(t not_installed "$CMD")"
         case "$CMD" in
-            git)      log_info "تثبيت Git: https://git-scm.com/downloads" ;;
-            gh)       log_info "تثبيت GitHub CLI: https://cli.github.com" ;;
-            flutter)  log_info "تثبيت Flutter: https://flutter.dev/docs/get-started/install" ;;
-            docker)   log_info "تثبيت Docker: https://docs.docker.com/get-docker" ;;
-            npm|node) log_info "تثبيت Node.js: https://nodejs.org" ;;
-            dotnet)   log_info "تثبيت .NET: https://dotnet.microsoft.com/download" ;;
-            *)        log_info "يرجى تثبيت '$CMD' أولاً." ;;
+            git)      log_info "$(t install_git)" ;;
+            gh)       log_info "$(t install_gh)" ;;
+            flutter)  log_info "$(t install_flutter)" ;;
+            docker)   log_info "$(t install_docker)" ;;
+            npm|node) log_info "$(t install_node)" ;;
+            dotnet)   log_info "$(t install_dotnet)" ;;
+            *)        log_info "$(t install_generic "$CMD")" ;;
         esac
         exit 1
     fi
@@ -56,9 +56,9 @@ function require_command() {
 
 function require_git_repo() {
     if [ ! -d ".git" ]; then
-        log_error "هذا المجلد ليس مستودع Git."
-        log_info "لإنشاء مستودع جديد: ${CYAN}dev create-repo${NC}"
-        log_info "أو لتهيئة git يدوياً:  ${CYAN}git init${NC}"
+        log_error "$(t git_not_repo)"
+        log_info "$(t git_not_repo_tip1)"
+        log_info "$(t git_not_repo_tip2)"
         exit 1
     fi
 }
@@ -103,8 +103,8 @@ function open_browser() {
 _SPINNER_PID=""
 
 function spinner_start() {
-    local LABEL="${1:-جاري التنفيذ...}"
-    [[ ! -t 1 ]] && return   # لا spinner خارج الـ terminal
+    local LABEL="${1:-...}"
+    [[ ! -t 1 ]] && return
 
     local FRAMES=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
     (
@@ -164,7 +164,7 @@ function notify() {
 
 # ──────────────────────────────────────
 # run_with_notify + spinner
-# الاستخدام: run_with_notify "Title" command arg1 arg2 ...
+# Usage: run_with_notify "Title" command arg1 arg2 ...
 # ──────────────────────────────────────
 function run_with_notify() {
     local TITLE=$1
@@ -191,10 +191,10 @@ function run_with_notify() {
     fi
 
     if [ $EXIT_CODE -eq 0 ]; then
-        notify "✅ $TITLE" "اكتمل في $TIME_STR" "true"
+        notify "✅ $TITLE" "$(t notify_completed "$TIME_STR")" "true"
         log_to_file "$TITLE completed in $TIME_STR"
     else
-        notify "❌ $TITLE" "فشل بعد $TIME_STR" "false"
+        notify "❌ $TITLE" "$(t notify_failed "$TIME_STR")" "false"
         log_to_file "$TITLE FAILED after $TIME_STR"
         _suggest_fix "$TITLE" "$EXIT_CODE"
     fi
@@ -203,49 +203,49 @@ function run_with_notify() {
 }
 
 # ──────────────────────────────────────
-# رسائل خطأ ذكية — تقترح الحل تلقائياً
+# Smart error suggestions
 # ──────────────────────────────────────
 function _suggest_fix() {
     local CONTEXT=$1
 
     echo ""
-    echo -e "${YELLOW}💡 اقتراحات لحل المشكلة:${NC}"
+    echo -e "${YELLOW}$(t suggest_fix_title)${NC}"
 
     case "$CONTEXT" in
         *Flutter*Build*APK*|*Flutter*Build*Android*)
-            echo -e "  • تأكد من إعداد Android SDK وأن ANDROID_HOME مضبوط"
-            echo -e "  • جرّب: ${CYAN}dev clean${NC} ثم أعد المحاولة"
-            echo -e "  • جرّب: ${CYAN}flutter pub get${NC}"
+            echo -e "  • $(t suggest_flutter_apk1)"
+            echo -e "  • $(t suggest_flutter_apk2) ${CYAN}dev clean${NC}"
+            echo -e "  • $(t suggest_flutter_apk3) ${CYAN}flutter pub get${NC}"
             ;;
         *Flutter*Build*iOS*)
-            echo -e "  • تأكد من Xcode ورخصة المطور"
-            echo -e "  • جرّب: ${CYAN}cd ios && pod install --repo-update${NC}"
+            echo -e "  • $(t suggest_flutter_ios1)"
+            echo -e "  • $(t suggest_flutter_ios2) ${CYAN}cd ios && pod install --repo-update${NC}"
             ;;
         *Flutter*Build*Web*)
-            echo -e "  • جرّب: ${CYAN}flutter channel stable && flutter upgrade${NC}"
+            echo -e "  • $(t suggest_flutter_web) ${CYAN}flutter channel stable && flutter upgrade${NC}"
             ;;
         *Flutter*Tests*)
-            echo -e "  • شغّل: ${CYAN}flutter test --verbose${NC} لمزيد من التفاصيل"
+            echo -e "  • $(t suggest_flutter_test) ${CYAN}flutter test --verbose${NC}"
             ;;
         *Docker*Build*)
-            echo -e "  • تأكد أن Docker Desktop يعمل: ${CYAN}dev doctor${NC}"
-            echo -e "  • تحقق من صحة الـ Dockerfile"
-            echo -e "  • جرّب: ${CYAN}docker system prune -f${NC} لتحرير المساحة"
+            echo -e "  • $(t suggest_docker1) ${CYAN}dev doctor${NC}"
+            echo -e "  • $(t suggest_docker2)"
+            echo -e "  • $(t suggest_docker3) ${CYAN}docker system prune -f${NC}"
             ;;
         *Node*Build*|*npm*)
-            echo -e "  • جرّب: ${CYAN}dev npm-install${NC} أولاً"
-            echo -e "  • تحقق من الـ package.json وأن script 'build' موجود"
+            echo -e "  • $(t suggest_npm1) ${CYAN}dev npm-install${NC}"
+            echo -e "  • $(t suggest_npm2)"
             ;;
         *.NET*Build*)
-            echo -e "  • جرّب: ${CYAN}dotnet restore${NC} أولاً"
-            echo -e "  • تحقق من إصدار .NET: ${CYAN}dotnet --version${NC}"
+            echo -e "  • $(t suggest_dotnet_build) ${CYAN}dotnet restore${NC}"
+            echo -e "  • $(t suggest_dotnet_version) ${CYAN}dotnet --version${NC}"
             ;;
         *.NET*Tests*)
-            echo -e "  • شغّل: ${CYAN}dotnet test --verbosity detailed${NC}"
+            echo -e "  • $(t suggest_dotnet_test) ${CYAN}dotnet test --verbosity detailed${NC}"
             ;;
         *)
-            echo -e "  • شغّل: ${CYAN}dev logs${NC} لمراجعة آخر الأحداث"
-            echo -e "  • شغّل: ${CYAN}dev doctor${NC} للتحقق من البيئة"
+            echo -e "  • $(t suggest_generic1) ${CYAN}dev logs${NC}"
+            echo -e "  • $(t suggest_generic2) ${CYAN}dev doctor${NC}"
             ;;
     esac
     echo ""
