@@ -5,6 +5,76 @@
 
 function quick_push() {
     require_git_repo
+
+    # تحميل SSH key قبل أي عملية push
+    eval "$(ssh-agent -s)" > /dev/null
+    ssh-add "$HOME_DIR/.ssh/github_personal" > /dev/null 2>&1
+
+    # ── فحص Commits المعلقة (محلية لم تُرفع بعد) ──
+    local PENDING_COUNT
+    PENDING_COUNT=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+
+    if (( PENDING_COUNT > 0 )); then
+        echo ""
+        divider
+        echo -e "${YELLOW}⚠️  يوجد ${BOLD}$PENDING_COUNT commit(s)${NC}${YELLOW} معلقة لم تُرفع بعد:${NC}"
+        echo ""
+        git log --oneline --decorate --color @{u}..HEAD
+        echo ""
+        divider
+        echo -e "  ${CYAN}1)${NC} رفع الـ commits المعلقة فقط (بدون تغييرات جديدة)"
+        echo -e "  ${CYAN}2)${NC} عمل commit للتغييرات الحالية ورفع الكل معاً"
+        echo -e "  ${CYAN}3)${NC} إلغاء"
+        echo ""
+        read -p "اختر [1-3]: " PENDING_CHOICE
+
+        case "$PENDING_CHOICE" in
+            1)
+                # رفع الـ commits المعلقة فقط
+                log_step "رفع الـ commits المعلقة..."
+                if git push; then
+                    log_success "تم رفع $PENDING_COUNT commit(s) بنجاح!"
+                    log_to_file "Pushed $PENDING_COUNT pending commit(s)"
+                else
+                    local PUSH_EXIT=$?
+                    _push_error_hints
+                    exit $PUSH_EXIT
+                fi
+                return 0
+                ;;
+            2)
+                # عمل commit للتغييرات الحالية أولاً ثم رفع الكل
+                local MSG=$ARG1
+                [[ -z "$MSG" ]] && read -p "Commit message للتغييرات الحالية: " MSG
+                [[ -z "$MSG" ]] && log_error "Commit message is required." && exit 1
+
+                log_step "Staging all changes..."
+                git add .
+                git commit -m "$MSG" || { log_warn "لا توجد تغييرات جديدة للـ commit."; }
+
+                log_step "رفع كل الـ commits ($((PENDING_COUNT + 1)) commits)..."
+                if git push; then
+                    log_success "تم رفع كل الـ commits بنجاح!"
+                    log_to_file "Pushed all commits: $MSG"
+                else
+                    local PUSH_EXIT=$?
+                    _push_error_hints
+                    exit $PUSH_EXIT
+                fi
+                return 0
+                ;;
+            3)
+                log_warn "تم الإلغاء."
+                return 0
+                ;;
+            *)
+                log_error "اختيار غير صحيح."
+                exit 1
+                ;;
+        esac
+    fi
+
+    # ── الحالة الطبيعية: لا توجد commits معلقة ──
     local MSG=$ARG1
     [[ -z "$MSG" ]] && read -p "Commit message: " MSG
     [[ -z "$MSG" ]] && log_error "Commit message is required." && exit 1
@@ -18,16 +88,21 @@ function quick_push() {
         log_to_file "Pushed: $MSG"
     else
         local PUSH_EXIT=$?
-        log_error "فشل الـ push."
-        echo ""
-        echo -e "${YELLOW}💡 أسباب شائعة وحلولها:${NC}"
-        echo -e "  • SSH غير مضبوط   → ${CYAN}dev ssh-check${NC}"
-        echo -e "  • الـ remote غير صحيح → ${CYAN}git remote -v${NC}"
-        echo -e "  • gh غير مسجّل    → ${CYAN}gh auth status${NC}"
-        echo -e "  • هناك commits جديدة على الـ remote → ${CYAN}dev sync${NC} أولاً"
-        echo ""
+        _push_error_hints
         exit $PUSH_EXIT
     fi
+}
+
+# ── دالة مساعدة لعرض أسباب فشل الـ push ──
+function _push_error_hints() {
+    log_error "فشل الـ push."
+    echo ""
+    echo -e "${YELLOW}💡 أسباب شائعة وحلولها:${NC}"
+    echo -e "  • SSH غير مضبوط       → ${CYAN}dev ssh-check${NC}"
+    echo -e "  • الـ remote غير صحيح → ${CYAN}git remote -v${NC}"
+    echo -e "  • gh غير مسجّل        → ${CYAN}gh auth status${NC}"
+    echo -e "  • هناك commits جديدة على الـ remote → ${CYAN}dev sync${NC} أولاً"
+    echo ""
 }
 
 function git_status() {

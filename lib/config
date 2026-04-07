@@ -1,61 +1,153 @@
 #!/bin/bash
 # ──────────────────────────────────────
-# config.sh — Configuration & SSH
+# config.sh — Configuration, Language & SSH
+# ──────────────────────────────────────
+
+# ──────────────────────────────────────
+# اختيار اللغة / Language Selection
+# ──────────────────────────────────────
+
+function _pick_language() {
+    echo ""
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  🌍 Developer CLI Toolkit${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  ${CYAN}1)${NC} العربية  🇸🇦"
+    echo -e "  ${CYAN}2)${NC} English  🇬🇧"
+    echo ""
+    read -p "  اختر / Choose [1/2]: " _LANG_CHOICE
+    case "$_LANG_CHOICE" in
+        1) echo "ar" ;;
+        2) echo "en" ;;
+        *) echo "en" ;;   # افتراضي / default
+    esac
+}
+
+function set_language() {
+    local NEW_LANG=$1
+
+    # تحديث متغير اللغة في الجلسة الحالية
+    LANG_PREF="$NEW_LANG"
+
+    # حفظه في ملف الإعدادات
+    if [ -f "$CONFIG_FILE" ]; then
+        grep -v "^LANG_PREF=" "$CONFIG_FILE" > "$TMP_DIR/_cfg_tmp" \
+            && mv "$TMP_DIR/_cfg_tmp" "$CONFIG_FILE"
+    fi
+    echo "LANG_PREF=$NEW_LANG" >> "$CONFIG_FILE"
+
+    # إعادة تحميل i18n بالإعدادات الجديدة
+    source "$LIB_DIR/i18n.sh"
+
+    if [[ "$NEW_LANG" == "ar" ]]; then
+        log_success "$(t lang_set_ar)"
+    else
+        log_success "$(t lang_set_en)"
+    fi
+}
+
+function change_language() {
+    divider
+    echo -e "${BOLD}$(t lang_cmd_title)${NC}"
+    divider
+
+    if [[ "$LANG_PREF" == "ar" ]]; then
+        local CURRENT_LABEL="$(t lang_cmd_arabic)"
+    else
+        local CURRENT_LABEL="$(t lang_cmd_english)"
+    fi
+    echo -e "  $(t lang_cmd_current): ${CYAN}${CURRENT_LABEL}${NC}"
+    echo ""
+    echo -e "  ${CYAN}1)${NC} العربية  🇸🇦"
+    echo -e "  ${CYAN}2)${NC} English  🇬🇧"
+    echo ""
+    read -p "  $(t lang_change_prompt) [1/2]: " _CHOICE
+    case "$_CHOICE" in
+        1) set_language "ar" ;;
+        2) set_language "en" ;;
+        *) log_warn "$(t lang_invalid)" ;;
+    esac
+    divider
+}
+
+# ──────────────────────────────────────
+# تحميل الإعدادات
 # ──────────────────────────────────────
 
 function load_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
+        # ── أول تشغيل: اسأل عن اللغة أولاً ──
+        local CHOSEN_LANG
+        CHOSEN_LANG=$(_pick_language)
+        LANG_PREF="$CHOSEN_LANG"
+        source "$LIB_DIR/i18n.sh"
+
         divider
-        echo -e "${BOLD}⚙️  First time setup${NC}"
-        echo -e "   Platform: ${CYAN}$OS_TYPE${NC}"
+        echo -e "${BOLD}$(t first_setup_title)${NC}"
+        echo -e "   $(t first_setup_platform): ${CYAN}$OS_TYPE${NC}"
         divider
-        read -p "Personal GitHub email : " PERSONAL_EMAIL
-        read -p "Company GitHub email  : " COMPANY_EMAIL
-        read -p "Your full name        : " GIT_NAME
-        read -p "Default editor (code/vim/nano): " EDITOR_PREF
+
+        read -p "$(t first_setup_email_personal) : " PERSONAL_EMAIL
+        read -p "$(t first_setup_email_company)  : " COMPANY_EMAIL
+        read -p "$(t first_setup_name)            : " GIT_NAME
+        read -p "$(t first_setup_editor)          : " EDITOR_PREF
         EDITOR_PREF="${EDITOR_PREF:-code}"
+
         {
             echo "PERSONAL_EMAIL=$PERSONAL_EMAIL"
             echo "COMPANY_EMAIL=$COMPANY_EMAIL"
             echo "GIT_NAME=$GIT_NAME"
             echo "EDITOR_PREF=$EDITOR_PREF"
+            echo "LANG_PREF=$CHOSEN_LANG"
         } > "$CONFIG_FILE"
+
         git config --global user.name "$GIT_NAME"
-        log_success "Config saved at $CONFIG_FILE"
+        log_success "$(t config_saved "$CONFIG_FILE")"
     fi
+
     source "$CONFIG_FILE"
+
+    # تطبيق اللغة المحفوظة
+    LANG_PREF="${LANG_PREF:-en}"
+    source "$LIB_DIR/i18n.sh"
 }
 
 function edit_config() {
     load_config
-    echo -e "${BOLD}Current config:${NC}"
+    echo -e "${BOLD}$(t config_current)${NC}"
     cat "$CONFIG_FILE"
     echo ""
-    if confirm "Edit config?"; then
+    if confirm "$(t config_edit_prompt)"; then
         read -p "Personal email [$PERSONAL_EMAIL]: " _PE
         read -p "Company email  [$COMPANY_EMAIL]: " _CE
-        read -p "Full name      [$GIT_NAME]: " _GN
-        read -p "Editor         [$EDITOR_PREF]: " _ED
+        read -p "Full name      [$GIT_NAME]: "      _GN
+        read -p "Editor         [$EDITOR_PREF]: "   _ED
         {
             echo "PERSONAL_EMAIL=${_PE:-$PERSONAL_EMAIL}"
             echo "COMPANY_EMAIL=${_CE:-$COMPANY_EMAIL}"
             echo "GIT_NAME=${_GN:-$GIT_NAME}"
             echo "EDITOR_PREF=${_ED:-$EDITOR_PREF}"
+            echo "LANG_PREF=$LANG_PREF"
         } > "$CONFIG_FILE"
-        log_success "Config updated."
+        log_success "$(t config_updated)"
     fi
 }
 
+# ──────────────────────────────────────
+# SSH
+# ──────────────────────────────────────
+
 function check_ssh() {
     load_config
-    log_info "Checking SSH keys..."
+    log_info "$(t ssh_checking)"
     local SSH_PATH="$HOME_DIR/.ssh"
     mkdir -p "$SSH_PATH"
 
     if [[ "$OS_TYPE" == "windows" ]]; then
         if ! command -v ssh-keygen &>/dev/null; then
-            log_error "OpenSSH not found."
-            log_info "Install: Settings → Apps → Optional Features → OpenSSH Client"
+            log_error "$(t ssh_no_openssh)"
+            log_info "$(t ssh_install_openssh)"
             exit 1
         fi
         powershell.exe -Command "
@@ -64,24 +156,24 @@ function check_ssh() {
         " 2>/dev/null
     fi
 
-    read -p "Account type (personal/company): " ACCOUNT
+    read -p "$(t ssh_account_type): " ACCOUNT
     local KEY_NAME EMAIL_VAR
     case "$ACCOUNT" in
         personal) KEY_NAME="github_personal"; EMAIL_VAR="$PERSONAL_EMAIL" ;;
         company)  KEY_NAME="github_company";  EMAIL_VAR="$COMPANY_EMAIL"  ;;
-        *) log_error "Invalid account. Use: personal or company"; exit 1 ;;
+        *) log_error "$(t ssh_invalid_account)"; exit 1 ;;
     esac
 
     if [ ! -f "$SSH_PATH/$KEY_NAME" ]; then
-        log_step "Generating SSH key for '$ACCOUNT'..."
+        log_step "$(t ssh_generating "$ACCOUNT")"
         ssh-keygen -t ed25519 -C "$EMAIL_VAR" -f "$SSH_PATH/$KEY_NAME" -N ""
-        echo -e "${GREEN}📋 Add this key to GitHub → Settings → SSH Keys:${NC}"
+        echo -e "${GREEN}$(t ssh_add_to_github)${NC}"
         echo -e "${CYAN}$(cat "$SSH_PATH/$KEY_NAME.pub")${NC}"
-        read -p "Press Enter after adding to GitHub..."
+        read -p "$(t ssh_press_enter)"
     fi
 
     eval "$(ssh-agent -s)" > /dev/null
     ssh-add "$SSH_PATH/$KEY_NAME" > /dev/null
-    log_success "SSH key loaded: $KEY_NAME"
+    log_success "$(t ssh_loaded "$KEY_NAME")"
     log_to_file "SSH loaded: $KEY_NAME"
 }
