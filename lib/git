@@ -10,30 +10,29 @@ function quick_push() {
     eval "$(ssh-agent -s)" > /dev/null
     ssh-add "$HOME_DIR/.ssh/github_personal" > /dev/null 2>&1
 
-    # ── فحص Commits المعلقة (محلية لم تُرفع بعد) ──
+    # ── Check for pending (unpushed) commits ──
     local PENDING_COUNT
     PENDING_COUNT=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
 
     if (( PENDING_COUNT > 0 )); then
         echo ""
         divider
-        echo -e "${YELLOW}⚠️  يوجد ${BOLD}$PENDING_COUNT commit(s)${NC}${YELLOW} معلقة لم تُرفع بعد:${NC}"
+        echo -e "${YELLOW}$(t git_pending_title "$PENDING_COUNT")${NC}"
         echo ""
         git log --oneline --decorate --color @{u}..HEAD
         echo ""
         divider
-        echo -e "  ${CYAN}1)${NC} رفع الـ commits المعلقة فقط (بدون تغييرات جديدة)"
-        echo -e "  ${CYAN}2)${NC} عمل commit للتغييرات الحالية ورفع الكل معاً"
-        echo -e "  ${CYAN}3)${NC} إلغاء"
+        echo -e "  ${CYAN}$(t git_pending_opt1)${NC}"
+        echo -e "  ${CYAN}$(t git_pending_opt2)${NC}"
+        echo -e "  ${CYAN}$(t git_pending_opt3)${NC}"
         echo ""
-        read -p "اختر [1-3]: " PENDING_CHOICE
+        read -p "$(t git_pending_choose): " PENDING_CHOICE
 
         case "$PENDING_CHOICE" in
             1)
-                # رفع الـ commits المعلقة فقط
-                log_step "رفع الـ commits المعلقة..."
+                log_step "$(t git_pending_pushing)"
                 if git push; then
-                    log_success "تم رفع $PENDING_COUNT commit(s) بنجاح!"
+                    log_success "$(t git_pending_pushed "$PENDING_COUNT")"
                     log_to_file "Pushed $PENDING_COUNT pending commit(s)"
                 else
                     local PUSH_EXIT=$?
@@ -43,18 +42,17 @@ function quick_push() {
                 return 0
                 ;;
             2)
-                # عمل commit للتغييرات الحالية أولاً ثم رفع الكل
                 local MSG=$ARG1
-                [[ -z "$MSG" ]] && read -p "Commit message للتغييرات الحالية: " MSG
-                [[ -z "$MSG" ]] && log_error "Commit message is required." && exit 1
+                [[ -z "$MSG" ]] && read -p "$(t git_pending_commit_msg): " MSG
+                [[ -z "$MSG" ]] && log_error "$(t git_commit_required)" && exit 1
 
-                log_step "Staging all changes..."
+                log_step "$(t git_staging)"
                 git add .
-                git commit -m "$MSG" || { log_warn "لا توجد تغييرات جديدة للـ commit."; }
+                git commit -m "$MSG" || { log_warn "$(t git_pending_no_changes)"; }
 
-                log_step "رفع كل الـ commits ($((PENDING_COUNT + 1)) commits)..."
+                log_step "$(t git_pending_pushing_all "$((PENDING_COUNT + 1))")"
                 if git push; then
-                    log_success "تم رفع كل الـ commits بنجاح!"
+                    log_success "$(t git_pending_pushed_all)"
                     log_to_file "Pushed all commits: $MSG"
                 else
                     local PUSH_EXIT=$?
@@ -64,27 +62,27 @@ function quick_push() {
                 return 0
                 ;;
             3)
-                log_warn "تم الإلغاء."
+                log_warn "$(t git_pending_cancelled)"
                 return 0
                 ;;
             *)
-                log_error "اختيار غير صحيح."
+                log_error "$(t git_pending_invalid)"
                 exit 1
                 ;;
         esac
     fi
 
-    # ── الحالة الطبيعية: لا توجد commits معلقة ──
+    # ── Normal flow: no pending commits ──
     local MSG=$ARG1
-    [[ -z "$MSG" ]] && read -p "Commit message: " MSG
-    [[ -z "$MSG" ]] && log_error "Commit message is required." && exit 1
+    [[ -z "$MSG" ]] && read -p "$(t git_commit_msg): " MSG
+    [[ -z "$MSG" ]] && log_error "$(t git_commit_required)" && exit 1
 
-    log_step "Staging all changes..."
+    log_step "$(t git_staging)"
     git add .
-    git commit -m "$MSG" || { log_warn "Nothing to commit."; exit 0; }
+    git commit -m "$MSG" || { log_warn "$(t git_nothing_commit)"; exit 0; }
 
     if git push; then
-        log_success "Pushed: \"$MSG\""
+        log_success "$(t git_pushed "$MSG")"
         log_to_file "Pushed: $MSG"
     else
         local PUSH_EXIT=$?
@@ -93,30 +91,30 @@ function quick_push() {
     fi
 }
 
-# ── دالة مساعدة لعرض أسباب فشل الـ push ──
+# ── Helper: push error hints ──
 function _push_error_hints() {
-    log_error "فشل الـ push."
+    log_error "$(t git_push_failed)"
     echo ""
-    echo -e "${YELLOW}💡 أسباب شائعة وحلولها:${NC}"
-    echo -e "  • SSH غير مضبوط       → ${CYAN}dev ssh-check${NC}"
-    echo -e "  • الـ remote غير صحيح → ${CYAN}git remote -v${NC}"
-    echo -e "  • gh غير مسجّل        → ${CYAN}gh auth status${NC}"
-    echo -e "  • هناك commits جديدة على الـ remote → ${CYAN}dev sync${NC} أولاً"
+    echo -e "${YELLOW}$(t git_push_tips)${NC}"
+    echo -e "  • $(t git_push_tip1)"
+    echo -e "  • $(t git_push_tip2)"
+    echo -e "  • $(t git_push_tip3)"
+    echo -e "  • $(t git_push_tip4)"
     echo ""
 }
 
 function git_status() {
     require_git_repo
     divider
-    echo -e "${BOLD}📋 Git Status${NC}"
+    echo -e "${BOLD}$(t git_status_title)${NC}"
     divider
     local BRANCH REMOTE AHEAD
     BRANCH=$(git branch --show-current)
     REMOTE=$(git remote get-url origin 2>/dev/null || echo "No remote")
     AHEAD=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo "?")
-    echo -e "  Branch : ${GREEN}$BRANCH${NC}"
-    echo -e "  Remote : ${CYAN}$REMOTE${NC}"
-    echo -e "  Ahead  : ${YELLOW}$AHEAD commits${NC}"
+    echo -e "  $(t git_branch_label) : ${GREEN}$BRANCH${NC}"
+    echo -e "  $(t git_remote_label) : ${CYAN}$REMOTE${NC}"
+    echo -e "  $(t git_ahead_label)  : ${YELLOW}$AHEAD $(t git_ahead_commits)${NC}"
     echo ""
     git status -s
     echo ""
@@ -128,60 +126,60 @@ function git_status() {
 function new_branch() {
     require_git_repo
     local BRANCH=$ARG1
-    [[ -z "$BRANCH" ]] && read -p "Branch name: " BRANCH
-    [[ -z "$BRANCH" ]] && log_error "Branch name is required." && exit 1
+    [[ -z "$BRANCH" ]] && read -p "$(t git_branch_name): " BRANCH
+    [[ -z "$BRANCH" ]] && log_error "$(t git_branch_required)" && exit 1
 
     git checkout -b "$BRANCH" \
-        && log_success "Created and switched to: $BRANCH" \
-        || log_error "Failed to create branch."
+        && log_success "$(t git_branch_created "$BRANCH")" \
+        || log_error "$(t git_branch_failed)"
 }
 
 function switch_branch() {
     require_git_repo
-    echo -e "${BOLD}Available branches:${NC}"
+    echo -e "${BOLD}$(t git_branch_list)${NC}"
     git branch -a --color
     echo ""
-    read -p "Branch to switch to: " BRANCH
+    read -p "$(t git_branch_switch): " BRANCH
     git checkout "$BRANCH" \
-        && log_success "Switched to: $BRANCH" \
-        || log_error "Failed to switch branch."
+        && log_success "$(t git_branch_switched "$BRANCH")" \
+        || log_error "$(t git_branch_failed)"
 }
 
 function merge_and_clean() {
     require_git_repo
     local CURRENT
     CURRENT=$(git branch --show-current)
-    read -p "Merge '$CURRENT' into (default: main): " TARGET
+    read -p "$(t git_merge_into "$CURRENT"): " TARGET
     TARGET="${TARGET:-main}"
 
     git checkout "$TARGET" \
         && git merge "$CURRENT" \
         && git branch -d "$CURRENT" \
-        && log_success "Merged '$CURRENT' → '$TARGET' and deleted branch." \
-        || log_error "Merge failed."
+        && log_success "$(t git_merged "$CURRENT" "$TARGET")" \
+        || log_error "$(t git_merge_failed)"
 }
 
 function undo_commit() {
     require_git_repo
     git reset --soft HEAD~1 \
-        && log_success "Last commit undone. Changes kept in staging." \
-        || log_error "Failed to undo commit."
+        && log_success "$(t git_undo_done)" \
+        || log_error "$(t git_undo_failed)"
 }
 
 function sync_repo() {
     require_git_repo
     local BRANCH
     BRANCH=$(git branch --show-current)
-    log_step "Syncing '$BRANCH' with remote..."
+    log_step "$(t git_syncing "$BRANCH")"
     git pull --rebase origin "$BRANCH" \
-        && log_success "Synced successfully!" \
+        && log_success "$(t git_synced)" \
         || {
-            log_error "فشل الـ sync."
-            echo -e "${YELLOW}💡 حل التعارضات:${NC}"
-            echo -e "  1. عدّل الملفات المتعارضة"
-            echo -e "  2. ${CYAN}git add .${NC}"
-            echo -e "  3. ${CYAN}git rebase --continue${NC}"
-            echo -e "  للإلغاء: ${CYAN}git rebase --abort${NC}"
+            log_error "$(t git_sync_failed)"
+            echo -e "${YELLOW}$(t git_sync_tips)${NC}"
+            echo -e "  $(t git_sync_tip1)"
+            echo -e "  $(t git_sync_tip2)"
+            echo -e "  $(t git_sync_tip3)"
+            echo -e "  $(t git_sync_abort)"
         }
 }
 

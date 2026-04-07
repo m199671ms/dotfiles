@@ -11,7 +11,7 @@ function run_doctor() {
     local ERRORS=0
 
     divider
-    echo -e "${BOLD}🏥 Dev Doctor — $OS_TYPE${NC}"
+    echo -e "${BOLD}$(t doctor_title) — $OS_TYPE${NC}"
     divider
 
     function _check() {
@@ -170,13 +170,13 @@ function run_doctor() {
 
     divider
     if [[ $ERRORS -eq 0 && $WARNINGS -eq 0 ]]; then
-        log_success "Everything looks good! No issues found."
+        log_success "$(t doctor_ok)"
     else
-        [[ $WARNINGS -gt 0 ]] && echo -e "  ${YELLOW}⚠️  $WARNINGS warning(s)${NC}"
-        [[ $ERRORS -gt 0 ]]   && echo -e "  ${RED}❌ $ERRORS error(s)${NC}"
+        [[ $WARNINGS -gt 0 ]] && echo -e "  ${YELLOW}$(t doctor_warnings "$WARNINGS")${NC}"
+        [[ $ERRORS -gt 0 ]]   && echo -e "  ${RED}$(t doctor_errors "$ERRORS")${NC}"
         if ! $FIX_MODE; then
             echo ""
-            echo -e "  Run ${CYAN}dev doctor --fix${NC} to auto-fix issues"
+            echo -e "  $(t doctor_fix_tip)"
         fi
     fi
     divider

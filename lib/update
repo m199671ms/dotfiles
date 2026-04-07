@@ -10,10 +10,9 @@ function self_update() {
     ssh-add "$HOME_DIR/.ssh/github_personal" > /dev/null 2>&1
 
     divider
-    echo -e "${BOLD}🔄 Checking for updates...${NC}"
+    echo -e "${BOLD}$(t update_checking)${NC}"
     divider
 
-    # 1. رفع التعديلات المحلية أولاً
     local SCRIPT_DIR
     SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
@@ -23,33 +22,32 @@ function self_update() {
         if ! git diff --quiet dev 2>/dev/null || \
            git status --short dev 2>/dev/null | grep -q "^[AM]"; then
 
-            log_step "Local changes detected. Pushing to GitHub..."
-            read -p "Commit message (default: 'update script'): " PUSH_MSG
+            log_step "$(t update_local_changes)"
+            read -p "$(t update_push_msg_prompt): " PUSH_MSG
             PUSH_MSG="${PUSH_MSG:-update script}"
 
             git add dev
             git commit -m "$PUSH_MSG" && git push \
-                && log_success "Local changes pushed!" \
-                || { log_error "Push failed. Check your remote/permissions."; exit 1; }
+                && log_success "$(t update_pushed)" \
+                || { log_error "$(t update_push_failed)"; exit 1; }
         else
-            log_info "No local changes to push."
+            log_info "$(t update_no_changes)"
         fi
 
         cd - > /dev/null
     fi
 
-    # 2. التحقق من تحديثات GitHub
     local TMP_FILE="$TMP_DIR/_dev_update_tmp"
 
     if ! gh api repos/m199671ms/dotfiles/contents/dev \
         --jq '.content' | base64 --decode > "$TMP_FILE" 2>/dev/null; then
-        log_error "Could not download update. Check 'gh auth status'."
+        log_error "$(t update_download_failed)"
         rm -f "$TMP_FILE"
         exit 1
     fi
 
     if ! head -1 "$TMP_FILE" | grep -q "bash"; then
-        log_error "Downloaded file doesn't look like a valid script."
+        log_error "$(t update_invalid_file)"
         rm -f "$TMP_FILE"
         exit 1
     fi
@@ -58,45 +56,44 @@ function self_update() {
     REMOTE_VERSION=$(grep 'SCRIPT_VERSION=' "$TMP_FILE" | head -1 | cut -d'"' -f2)
 
     if [[ -z "$REMOTE_VERSION" ]]; then
-        log_warn "Could not determine remote version."
+        log_warn "$(t update_no_version)"
         rm -f "$TMP_FILE"
         exit 1
     fi
 
-    echo -e "  Platform        : ${CYAN}$OS_TYPE${NC}"
-    echo -e "  Current version : ${YELLOW}$SCRIPT_VERSION${NC}"
-    echo -e "  Latest version  : ${GREEN}$REMOTE_VERSION${NC}"
+    echo -e "  $(t update_platform)        : ${CYAN}$OS_TYPE${NC}"
+    echo -e "  $(t update_current) : ${YELLOW}$SCRIPT_VERSION${NC}"
+    echo -e "  $(t update_latest)  : ${GREEN}$REMOTE_VERSION${NC}"
     echo ""
 
     if [[ "$SCRIPT_VERSION" == "$REMOTE_VERSION" ]]; then
-        log_success "Already up to date!"
+        log_success "$(t update_uptodate)"
         rm -f "$TMP_FILE"
         return 0
     fi
 
-    # 3. تطبيق التحديث
-    read -p "Update to v$REMOTE_VERSION? (y/n): " CONFIRM
+    read -p "$(t update_confirm "$REMOTE_VERSION") $(t confirm_yn): " CONFIRM
     if [[ "$CONFIRM" != "y" ]]; then
-        log_warn "Update cancelled."
+        log_warn "$(t update_cancelled)"
         rm -f "$TMP_FILE"
         return 0
     fi
 
     local BACKUP_PATH="${SCRIPT_PATH}.backup_v${SCRIPT_VERSION}"
     cp "$SCRIPT_PATH" "$BACKUP_PATH"
-    log_info "Backup saved: $BACKUP_PATH"
+    log_info "$(t update_backup "$BACKUP_PATH")"
 
     mv "$TMP_FILE" "$SCRIPT_PATH"
     chmod +x "$SCRIPT_PATH"
 
-    log_success "Updated to v$REMOTE_VERSION successfully!"
+    log_success "$(t update_success "$REMOTE_VERSION")"
     log_to_file "Script updated: $SCRIPT_VERSION → $REMOTE_VERSION"
-    echo -e "${CYAN}ℹ️  Changes will apply on next run.${NC}"
+    echo -e "${CYAN}ℹ️  $(t update_note)${NC}"
 }
 
 function self_rollback() {
     divider
-    echo -e "${BOLD}⏪ Rollback${NC}"
+    echo -e "${BOLD}$(t rollback_title)${NC}"
     divider
 
     local BACKUPS=()
@@ -107,11 +104,11 @@ function self_rollback() {
              | sort -rz)
 
     if [[ ${#BACKUPS[@]} -eq 0 ]]; then
-        log_error "No backups found."
+        log_error "$(t rollback_no_backups)"
         return 1
     fi
 
-    echo -e "${BOLD}Available backups:${NC}"
+    echo -e "${BOLD}$(t rollback_available)${NC}"
     for i in "${!BACKUPS[@]}"; do
         local VER
         VER=$(echo "${BACKUPS[$i]}" | grep -o 'v[0-9.]*$')
@@ -119,15 +116,15 @@ function self_rollback() {
     done
     echo ""
 
-    read -p "Choose backup [1-${#BACKUPS[@]}]: " CHOICE
+    read -p "$(t rollback_choose "${#BACKUPS[@]}"): " CHOICE
     local INDEX=$((CHOICE - 1))
 
     if [[ -z "${BACKUPS[$INDEX]}" ]]; then
-        log_error "Invalid choice."
+        log_error "$(t rollback_invalid)"
         return 1
     fi
 
     cp "${BACKUPS[$INDEX]}" "$SCRIPT_PATH"
     chmod +x "$SCRIPT_PATH"
-    log_success "Rolled back to $(echo "${BACKUPS[$INDEX]}" | grep -o 'v[0-9.]*$')!"
+    log_success "$(t rollback_success "$(echo "${BACKUPS[$INDEX]}" | grep -o 'v[0-9.]*$')")"
 }

@@ -6,16 +6,16 @@
 function flutter_new() {
     require_command flutter
     local NAME=$ARG1
-    [[ -z "$NAME" ]] && read -p "Project name: " NAME
-    [[ -z "$NAME" ]] && log_error "Project name is required." && exit 1
+    [[ -z "$NAME" ]] && read -p "$(t flutter_project_name): " NAME
+    [[ -z "$NAME" ]] && log_error "$(t flutter_project_required)" && exit 1
 
-    read -p "Organization (e.g. com.company): " ORG
+    read -p "$(t flutter_org): " ORG
     ORG="${ORG:-com.example}"
 
-    log_step "Creating Flutter project: $NAME"
+    log_step "$(t flutter_creating "$NAME")"
     flutter create --org "$ORG" "$NAME" \
-        && log_success "Flutter project '$NAME' created!" \
-        || { log_error "flutter create failed."; exit 1; }
+        && log_success "$(t flutter_created "$NAME")" \
+        || { log_error "$(t flutter_create_failed)"; exit 1; }
 }
 
 function _fix_cocoapods() {
@@ -56,7 +56,7 @@ function _run_flutter_with_error_handling() {
 
     while [ $ATTEMPT -le $MAX_RETRIES ]; do
         ATTEMPT=$((ATTEMPT + 1))
-        log_step "Launching Flutter app (attempt $ATTEMPT)..."
+        log_step "$(t flutter_launching "$ATTEMPT")"
 
         local TMP_LOG="$TMP_DIR/_flutter_run_log"
         # shellcheck disable=SC2086
@@ -67,12 +67,12 @@ function _run_flutter_with_error_handling() {
         rm -f "$TMP_LOG"
 
         if [ $EXIT_CODE -eq 0 ]; then
-            log_success "Session ended."
+            log_success "$(t flutter_session_ended)"
             return 0
         fi
 
         if echo "$OUTPUT" | grep -q "Flutter run key commands\|Syncing files to device\|To hot reload\|Running with"; then
-            log_success "App was running successfully."
+            log_success "$(t flutter_running)"
             return 0
         fi
 
@@ -93,11 +93,11 @@ function _run_flutter_with_error_handling() {
             flutter pub get && continue
         fi
 
-        log_error "Launch failed. Exit code: $EXIT_CODE"
+        log_error "$(t flutter_launch_failed "$EXIT_CODE")"
         return 1
     done
 
-    log_error "Failed after $MAX_RETRIES attempts."
+    log_error "$(t flutter_max_retries "$MAX_RETRIES")"
     return 1
 }
 
@@ -111,7 +111,7 @@ function flutter_run_device() {
         elif grep -q "^$ARG1=" "$PROJECTS_FILE" 2>/dev/null; then
             TARGET_PATH=$(grep "^$ARG1=" "$PROJECTS_FILE" | cut -d= -f2)
         else
-            log_error "Project '$ARG1' not found."
+            log_error "$(t flutter_project_missing "$ARG1")"
             exit 1
         fi
         log_step "Switching to: $TARGET_PATH"
@@ -119,46 +119,46 @@ function flutter_run_device() {
     fi
 
     if [ ! -f "pubspec.yaml" ]; then
-        log_error "No Flutter project found in: $(pwd)"
+        log_error "$(t flutter_no_pubspec "$(pwd)")"
         exit 1
     fi
 
     divider
-    echo -e "${BOLD}⚡ Flutter Run${NC}"
-    echo -e "   Platform: ${CYAN}$OS_TYPE${NC}"
+    echo -e "${BOLD}$(t flutter_run_title)${NC}"
+    echo -e "   $(t flutter_platform): ${CYAN}$OS_TYPE${NC}"
     divider
 
     local CHOICE
     case "$OS_TYPE" in
         macos)
-            echo "  1) Android  2) iOS  3) macOS  4) Web  5) جهاز محدد"
-            read -p "Choice: " CHOICE
+            echo "  1) Android  2) iOS  3) macOS  4) Web  5) $(t flutter_device_id)"
+            read -p "$(t flutter_choice): " CHOICE
             case $CHOICE in
                 1) read -p "Device ID (empty = first): " D; _run_flutter_with_error_handling "-d ${D:-android}" ;;
                 2) read -p "Device ID (empty = first): " D; _run_flutter_with_error_handling "-d ${D:-ios}" ;;
                 3) _run_flutter_with_error_handling "-d macos" ;;
                 4) read -p "Browser (chrome/edge): " B; _run_flutter_with_error_handling "-d ${B:-chrome}" ;;
-                5) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "Required."; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
+                5) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "$(t flutter_device_required)"; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
                 *) log_error "Invalid choice." && exit 1 ;;
             esac ;;
         windows)
-            echo "  1) Android  2) Windows  3) Web  4) جهاز محدد"
-            read -p "Choice: " CHOICE
+            echo "  1) Android  2) Windows  3) Web  4) $(t flutter_device_id)"
+            read -p "$(t flutter_choice): " CHOICE
             case $CHOICE in
                 1) read -p "Device ID (empty = first): " D; _run_flutter_with_error_handling "-d ${D:-android}" ;;
                 2) _run_flutter_with_error_handling "-d windows" ;;
                 3) read -p "Browser (chrome/edge): " B; _run_flutter_with_error_handling "-d ${B:-chrome}" ;;
-                4) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "Required."; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
+                4) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "$(t flutter_device_required)"; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
                 *) log_error "Invalid choice." && exit 1 ;;
             esac ;;
         linux)
-            echo "  1) Android  2) Linux  3) Web  4) جهاز محدد"
-            read -p "Choice: " CHOICE
+            echo "  1) Android  2) Linux  3) Web  4) $(t flutter_device_id)"
+            read -p "$(t flutter_choice): " CHOICE
             case $CHOICE in
                 1) read -p "Device ID (empty = first): " D; _run_flutter_with_error_handling "-d ${D:-android}" ;;
                 2) _run_flutter_with_error_handling "-d linux" ;;
                 3) read -p "Browser (chrome/edge): " B; _run_flutter_with_error_handling "-d ${B:-chrome}" ;;
-                4) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "Required."; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
+                4) flutter devices; read -p "Device ID: " D; [[ -z "$D" ]] && { log_error "$(t flutter_device_required)"; exit 1; }; _run_flutter_with_error_handling "-d $D" ;;
                 *) log_error "Invalid choice." && exit 1 ;;
             esac ;;
     esac
@@ -166,16 +166,15 @@ function flutter_run_device() {
 
 function flutter_build() {
     require_command flutter
-    echo -e "${BOLD}Build target:${NC}"
+    echo -e "${BOLD}$(t flutter_build_title)${NC}"
     echo "  1) APK (release)  2) APK (debug)"
     case "$OS_TYPE" in
         macos)   echo "  3) iOS  4) Web  5) macOS" ;;
         windows) echo "  3) Windows  4) Web" ;;
         linux)   echo "  3) Linux  4) Web" ;;
     esac
-    read -p "Choice: " CHOICE
+    read -p "$(t flutter_choice): " CHOICE
 
-    # FIX: استبدال eval بتمرير الأمر مباشرة
     case "$OS_TYPE" in
         macos)
             case $CHOICE in
@@ -207,13 +206,13 @@ function flutter_build() {
 
 function flutter_test() {
     require_command flutter
-    log_step "Running Flutter tests..."
+    log_step "$(t flutter_tests_running)"
     run_with_notify "Flutter Tests" flutter test
 }
 
 function flutter_upgrade() {
     require_command flutter
-    log_step "Upgrading Flutter..."
+    log_step "$(t flutter_upgrading)"
     flutter upgrade && flutter pub upgrade
-    log_success "Flutter upgraded!"
+    log_success "$(t flutter_upgraded)"
 }

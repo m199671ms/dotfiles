@@ -6,15 +6,14 @@
 function docker_build() {
     require_command docker
     local NAME=$ARG1
-    [[ -z "$NAME" ]] && read -p "Image name: " NAME
-    [[ -z "$NAME" ]] && log_error "Image name is required." && exit 1
-    [ ! -f Dockerfile ] && { log_error "No Dockerfile found in current directory."; exit 1; }
+    [[ -z "$NAME" ]] && read -p "$(t docker_image_name): " NAME
+    [[ -z "$NAME" ]] && log_error "$(t docker_image_required)" && exit 1
+    [ ! -f Dockerfile ] && { log_error "$(t docker_no_dockerfile)"; exit 1; }
 
-    read -p "Tag (default: latest): " TAG
+    read -p "$(t docker_tag): " TAG
     TAG="${TAG:-latest}"
 
-    log_step "Building image: $NAME:$TAG"
-    # FIX: استبدال eval بتمرير الأمر مباشرة
+    log_step "$(t docker_building "$NAME:$TAG")"
     run_with_notify "Docker Build $NAME:$TAG" docker build -t "$NAME:$TAG" .
     log_to_file "Docker built: $NAME:$TAG"
 }
@@ -22,62 +21,62 @@ function docker_build() {
 function docker_run() {
     require_command docker
     local NAME=$ARG1
-    [[ -z "$NAME" ]] && read -p "Image name: " NAME
-    [[ -z "$NAME" ]] && log_error "Image name is required." && exit 1
+    [[ -z "$NAME" ]] && read -p "$(t docker_image_name): " NAME
+    [[ -z "$NAME" ]] && log_error "$(t docker_image_required)" && exit 1
 
-    read -p "Port mapping (e.g. 8080:80, empty to skip): " PORT
-    read -p "Container name (empty to skip): " CNAME
+    read -p "$(t docker_port): " PORT
+    read -p "$(t docker_container_name): " CNAME
 
     local DOCKER_ARGS=(-it --rm)
     [[ -n "$PORT"  ]] && DOCKER_ARGS+=(-p "$PORT")
     [[ -n "$CNAME" ]] && DOCKER_ARGS+=(--name "$CNAME")
 
-    log_step "Running container: $NAME"
+    log_step "$(t docker_running "$NAME")"
     docker run "${DOCKER_ARGS[@]}" "$NAME"
 }
 
 function docker_list() {
     require_command docker
     divider
-    echo -e "${BOLD}🐳 Images${NC}"
+    echo -e "${BOLD}$(t docker_images_title)${NC}"
     divider
     docker images
     echo ""
     divider
-    echo -e "${BOLD}🐳 Running Containers${NC}"
+    echo -e "${BOLD}$(t docker_containers_title)${NC}"
     divider
     docker ps
 }
 
 function docker_stop_all() {
     require_command docker
-    log_step "Stopping all running containers..."
+    log_step "$(t docker_stopping)"
     local RUNNING
     RUNNING=$(docker ps -q)
     if [[ -n "$RUNNING" ]]; then
         # shellcheck disable=SC2086
-        docker stop $RUNNING && log_success "All containers stopped."
+        docker stop $RUNNING && log_success "$(t docker_stopped)"
     else
-        log_warn "No running containers."
+        log_warn "$(t docker_no_containers)"
     fi
 }
 
 function docker_clean() {
     require_command docker
-    log_warn "This will remove all stopped containers and unused images."
-    confirm "Continue?" || exit 0
-    docker system prune -f && log_success "Docker cleaned!"
+    log_warn "$(t docker_clean_warn)"
+    confirm "$(t continue_prompt)" || exit 0
+    docker system prune -f && log_success "$(t docker_cleaned)"
 }
 
 function docker_compose_up() {
     require_command docker
-    [ ! -f docker-compose.yml ] && { log_error "No docker-compose.yml found."; exit 1; }
-    log_step "Starting services..."
-    docker compose up -d && log_success "Services started!" || log_error "Failed."
+    [ ! -f docker-compose.yml ] && { log_error "$(t docker_no_compose)"; exit 1; }
+    log_step "$(t docker_compose_starting)"
+    docker compose up -d && log_success "$(t docker_compose_started)" || log_error "$(t docker_failed)"
 }
 
 function docker_compose_down() {
     require_command docker
-    log_step "Stopping services..."
-    docker compose down && log_success "Services stopped." || log_error "Failed."
+    log_step "$(t docker_compose_stopping)"
+    docker compose down && log_success "$(t docker_compose_stopped)" || log_error "$(t docker_failed)"
 }

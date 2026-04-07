@@ -10,18 +10,18 @@ function show_logs() {
         LOG_SIZE=$(du -sh "$LOG_FILE" 2>/dev/null | cut -f1)
 
         divider
-        echo -e "${BOLD}📋 Activity Log${NC}"
-        echo -e "   الملف : ${CYAN}$LOG_FILE${NC}"
-        echo -e "   الحجم : ${CYAN}$LOG_SIZE${NC}  |  السطور : ${CYAN}$TOTAL_LINES${NC}/1000"
+        echo -e "${BOLD}$(t log_title)${NC}"
+        echo -e "   $(t log_file_label) : ${CYAN}$LOG_FILE${NC}"
+        echo -e "   $(t log_size_label) : ${CYAN}$LOG_SIZE${NC}  |  $(t log_lines_label) : ${CYAN}$TOTAL_LINES${NC}/1000"
         divider
 
         local SUCCESSES FAILURES
         SUCCESSES=$(grep -c "completed in" "$LOG_FILE" 2>/dev/null || echo 0)
         FAILURES=$(grep -c "FAILED after" "$LOG_FILE" 2>/dev/null || echo 0)
-        echo -e "  ${GREEN}✅ ناجح: $SUCCESSES${NC}   ${RED}❌ فاشل: $FAILURES${NC}"
+        echo -e "  ${GREEN}$(t log_success_count "$SUCCESSES")${NC}   ${RED}$(t log_fail_count "$FAILURES")${NC}"
         divider
 
-        echo -e "${BOLD}آخر 30 حدث:${NC}"
+        echo -e "${BOLD}$(t log_last_events)${NC}"
         echo ""
         tail -30 "$LOG_FILE" | while IFS= read -r line; do
             if echo "$line" | grep -q "FAILED"; then
@@ -35,19 +35,19 @@ function show_logs() {
             fi
         done
         divider
-        echo -e "  ${CYAN}لمسح اللوغ:${NC} rm $LOG_FILE"
+        echo -e "  ${CYAN}$(t log_clear_tip)${NC} rm $LOG_FILE"
     else
-        log_warn "لا يوجد سجل بعد. ستظهر هنا الأحداث بعد أول أمر."
+        log_warn "$(t log_empty)"
     fi
 }
 
 function show_info() {
     divider
-    echo -e "${BOLD}   Developer CLI Toolkit v6${NC}"
-    echo -e "   Version  : ${CYAN}$SCRIPT_VERSION${NC}"
-    echo -e "   Platform : ${CYAN}$OS_TYPE${NC}"
+    echo -e "${BOLD}   $(t info_title)${NC}"
+    echo -e "   $(t info_version)  : ${CYAN}$SCRIPT_VERSION${NC}"
+    echo -e "   $(t info_platform) : ${CYAN}$OS_TYPE${NC}"
     divider
-    echo -e "${BOLD}Tools:${NC}"
+    echo -e "${BOLD}$(t info_tools):${NC}"
     for tool in git gh flutter docker node npm dotnet code; do
         if command -v "$tool" &>/dev/null; then
             local VER
@@ -58,94 +58,95 @@ function show_info() {
         fi
     done
     echo ""
-    echo -e "${BOLD}SSH Keys:${NC}"
+    echo -e "${BOLD}$(t info_ssh_keys):${NC}"
     while IFS= read -r k; do
         echo -e "  ${GREEN}🔑 $k${NC}"
-    done < <(ls "$HOME_DIR/.ssh/github_"* 2>/dev/null) || echo -e "  ${YELLOW}None found${NC}"
+    done < <(ls "$HOME_DIR/.ssh/github_"* 2>/dev/null) || echo -e "  ${YELLOW}$(t info_ssh_none)${NC}"
     echo ""
     if [ -f "$CONFIG_FILE" ]; then
-        echo -e "${BOLD}Config:${NC} $CONFIG_FILE"
+        echo -e "${BOLD}$(t info_config):${NC} $CONFIG_FILE"
         source "$CONFIG_FILE"
-        echo -e "  Name   : $GIT_NAME"
-        echo -e "  Editor : $EDITOR_PREF"
+        echo -e "  $(t info_name)   : $GIT_NAME"
+        echo -e "  $(t info_editor) : $EDITOR_PREF"
     fi
     divider
 }
 
 function show_help() {
     divider
-    echo -e "${BOLD}   Developer CLI Toolkit v6${NC}"
-    echo -e "   Version: ${CYAN}$SCRIPT_VERSION${NC}  |  Platform: ${CYAN}$OS_TYPE${NC}"
+    echo -e "${BOLD}   Developer CLI Toolkit${NC}"
+    echo -e "   $(t info_version): ${CYAN}$SCRIPT_VERSION${NC}  |  $(t info_platform): ${CYAN}$OS_TYPE${NC}"
     divider
     echo -e "${BOLD}${MAGENTA}📦 Repository${NC}"
-    echo -e "  ${GREEN}create-repo${NC}              إنشاء مستودع GitHub جديد"
+    echo -e "  ${GREEN}create-repo${NC}              $(t help_create_repo)"
     echo ""
     echo -e "${BOLD}${MAGENTA}⚡ Git${NC}"
-    echo -e "  ${GREEN}push${NC} \"msg\"               add + commit + push"
-    echo -e "  ${GREEN}sync${NC}                     pull --rebase من الـ remote"
-    echo -e "  ${GREEN}status${NC}                   حالة المشروع والـ commits"
-    echo -e "  ${GREEN}log${NC}                      git log بشكل جميل"
-    echo -e "  ${GREEN}new-branch${NC} <n>        إنشاء branch جديد"
-    echo -e "  ${GREEN}switch-branch${NC}            التبديل بين الفروع"
-    echo -e "  ${GREEN}merge-clean${NC}              دمج branch وحذفه"
-    echo -e "  ${GREEN}clean-branches${NC}           حذف الفروع المدمجة"
-    echo -e "  ${GREEN}undo${NC}                     التراجع عن آخر commit"
+    echo -e "  ${GREEN}push${NC} \"msg\"               $(t help_push)"
+    echo -e "  ${GREEN}sync${NC}                     $(t help_sync)"
+    echo -e "  ${GREEN}status${NC}                   $(t help_status)"
+    echo -e "  ${GREEN}log${NC}                      $(t help_log)"
+    echo -e "  ${GREEN}new-branch${NC} <n>           $(t help_new_branch)"
+    echo -e "  ${GREEN}switch-branch${NC}            $(t help_switch_branch)"
+    echo -e "  ${GREEN}merge-clean${NC}              $(t help_merge_clean)"
+    echo -e "  ${GREEN}clean-branches${NC}           $(t help_clean_branches)"
+    echo -e "  ${GREEN}undo${NC}                     $(t help_undo)"
     echo ""
     echo -e "${BOLD}${MAGENTA}📂 Projects${NC}"
-    echo -e "  ${GREEN}save-project${NC} <n>      حفظ المشروع الحالي"
-    echo -e "  ${GREEN}goto${NC} <n>              الانتقال السريع لمشروع"
-    echo -e "  ${GREEN}projects${NC}                 قائمة المشاريع المحفوظة"
-    echo -e "  ${GREEN}remove-project${NC} <n>    حذف مشروع من القائمة"
+    echo -e "  ${GREEN}save-project${NC} <n>         $(t help_save_project)"
+    echo -e "  ${GREEN}goto${NC} <n>                 $(t help_goto)"
+    echo -e "  ${GREEN}projects${NC}                 $(t help_projects)"
+    echo -e "  ${GREEN}remove-project${NC} <n>       $(t help_remove_project)"
     echo ""
     echo -e "${BOLD}${MAGENTA}⚡ Flutter${NC}"
-    echo -e "  ${GREEN}flutter-new${NC} <n>       إنشاء مشروع Flutter"
-    echo -e "  ${GREEN}flutter-run${NC} [name]       تشغيل (خيارات حسب $OS_TYPE)"
-    echo -e "  ${GREEN}flutter-build${NC}            بناء + إشعار (حسب $OS_TYPE)"
-    echo -e "  ${GREEN}flutter-test${NC}             تشغيل الاختبارات + إشعار"
-    echo -e "  ${GREEN}flutter-upgrade${NC}          ترقية Flutter والـ packages"
+    echo -e "  ${GREEN}flutter-new${NC} <n>          $(t help_flutter_new)"
+    echo -e "  ${GREEN}flutter-run${NC} [name]       $(t help_flutter_run)"
+    echo -e "  ${GREEN}flutter-build${NC}            $(t help_flutter_build)"
+    echo -e "  ${GREEN}flutter-test${NC}             $(t help_flutter_test)"
+    echo -e "  ${GREEN}flutter-upgrade${NC}          $(t help_flutter_upgrade)"
     echo -e "  ${GREEN}clean${NC}                    flutter clean"
     echo ""
     echo -e "${BOLD}${MAGENTA}🐳 Docker${NC}"
-    echo -e "  ${GREEN}docker-build${NC} <n>      بناء image + إشعار"
-    echo -e "  ${GREEN}docker-run${NC} <n>        تشغيل container"
-    echo -e "  ${GREEN}docker-list${NC}              عرض images والـ containers"
-    echo -e "  ${GREEN}docker-stop${NC}              إيقاف كل الـ containers"
-    echo -e "  ${GREEN}docker-clean${NC}             تنظيف Docker"
+    echo -e "  ${GREEN}docker-build${NC} <n>         $(t help_docker_build)"
+    echo -e "  ${GREEN}docker-run${NC} <n>           $(t help_docker_run)"
+    echo -e "  ${GREEN}docker-list${NC}              $(t help_docker_list)"
+    echo -e "  ${GREEN}docker-stop${NC}              $(t help_docker_stop)"
+    echo -e "  ${GREEN}docker-clean${NC}             $(t help_docker_clean)"
     echo -e "  ${GREEN}compose-up${NC}               docker compose up -d"
     echo -e "  ${GREEN}compose-down${NC}             docker compose down"
     echo ""
     echo -e "${BOLD}${MAGENTA}🟢 Node.js / Vue${NC}"
     echo -e "  ${GREEN}npm-install${NC}              npm install"
     echo -e "  ${GREEN}npm-run${NC} <script>         npm run <script>"
-    echo -e "  ${GREEN}npm-build${NC}                npm run build + إشعار"
-    echo -e "  ${GREEN}vue-new${NC} <n>           إنشاء مشروع Vue"
+    echo -e "  ${GREEN}npm-build${NC}                $(t help_npm_build)"
+    echo -e "  ${GREEN}vue-new${NC} <n>              $(t help_vue_new)"
     echo ""
     echo -e "${BOLD}${MAGENTA}💜 .NET${NC}"
-    echo -e "  ${GREEN}dotnet-new${NC} <n>        إنشاء مشروع .NET"
-    echo -e "  ${GREEN}dotnet-run${NC}               تشغيل المشروع"
-    echo -e "  ${GREEN}dotnet-build${NC}             بناء المشروع + إشعار"
-    echo -e "  ${GREEN}dotnet-test${NC}              تشغيل الاختبارات + إشعار"
+    echo -e "  ${GREEN}dotnet-new${NC} <n>           $(t help_dotnet_new)"
+    echo -e "  ${GREEN}dotnet-run${NC}               $(t help_dotnet_run)"
+    echo -e "  ${GREEN}dotnet-build${NC}             $(t help_dotnet_build)"
+    echo -e "  ${GREEN}dotnet-test${NC}              $(t help_dotnet_test)"
     echo ""
     echo -e "${BOLD}${MAGENTA}🌐 Web${NC}"
-    echo -e "  ${GREEN}web-serve${NC} [port]         تشغيل local server"
+    echo -e "  ${GREEN}web-serve${NC} [port]         $(t help_web_serve)"
     echo ""
     echo -e "${BOLD}${MAGENTA}🏥 Doctor${NC}"
-    echo -e "  ${GREEN}doctor${NC}                   فحص بيئة التطوير"
-    echo -e "  ${GREEN}doctor --fix${NC}             فحص وإصلاح تلقائي"
+    echo -e "  ${GREEN}doctor${NC}                   $(t help_doctor)"
+    echo -e "  ${GREEN}doctor --fix${NC}             $(t help_doctor_fix)"
     echo ""
     echo -e "${BOLD}${MAGENTA}🔧 Other${NC}"
-    echo -e "  ${GREEN}ssh-check${NC}                إعداد SSH keys"
-    echo -e "  ${GREEN}config${NC}                   تعديل الإعدادات"
-    echo -e "  ${GREEN}info${NC}                     معلومات البيئة"
-    echo -e "  ${GREEN}logs${NC}                     سجل النشاط (مع إحصائيات)"
-    echo -e "  ${GREEN}update${NC}                   تحديث السكريبت من GitHub"
-    echo -e "  ${GREEN}rollback${NC}                 الرجوع لإصدار سابق"
-    echo -e "  ${GREEN}help${NC}                     هذه القائمة"
+    echo -e "  ${GREEN}ssh-check${NC}                $(t help_ssh_check)"
+    echo -e "  ${GREEN}config${NC}                   $(t help_config)"
+    echo -e "  ${GREEN}lang${NC}                     $(t help_lang)"
+    echo -e "  ${GREEN}info${NC}                     $(t help_info)"
+    echo -e "  ${GREEN}logs${NC}                     $(t help_logs)"
+    echo -e "  ${GREEN}update${NC}                   $(t help_update)"
+    echo -e "  ${GREEN}rollback${NC}                 $(t help_rollback)"
+    echo -e "  ${GREEN}help${NC}                     $(t help_help)"
     divider
     echo -e "${BOLD}${MAGENTA}⚡ Aliases${NC}"
-    echo -e "  ${GREEN}alias-add${NC} <n> <cmd>   إضافة اختصار جديد"
-    echo -e "  ${GREEN}alias-remove${NC} <n>      حذف اختصار"
-    echo -e "  ${GREEN}alias-list${NC}            عرض كل الاختصارات"
+    echo -e "  ${GREEN}alias-add${NC} <n> <cmd>      $(t help_alias_add)"
+    echo -e "  ${GREEN}alias-remove${NC} <n>         $(t help_alias_remove)"
+    echo -e "  ${GREEN}alias-list${NC}               $(t help_alias_list)"
     echo ""
     divider
     echo -e "${BOLD}Usage:${NC} dev <command> [args]"
